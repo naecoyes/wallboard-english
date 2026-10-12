@@ -179,7 +179,13 @@ export function renderWord(root) {
       ? h('section', { class: 'wm-card glass' }, h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'NOTES')), ...noteGroups)
       : null;
 
-    body.append(hero, h('div', { class: 'wm-side' }, exCard, notesCard));
+    const definitionCard = h('section', { class: 'wm-card glass' },
+      h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'ENGLISH MEANING')),
+      w.enDefs?.length
+        ? h('ol', { class: 'wm-english-defs' }, ...w.enDefs.map(d => h('li', {}, d)))
+        : h('p', { class: 'wm-cn' }, 'English definition unavailable in this dictionary.'),
+      h('div', { class: 'wm-src' }, 'Source: ECDICT'));
+    body.append(hero, h('div', { class: 'wm-side' }, definitionCard, exCard, notesCard));
 
     // 预生成发音：当前词 → 下一个词（自动切换时直接就绪）→ 例句
     // smart 模式下例句要等有人触摸屏幕才生成，避免无人时每 45 秒消耗多次额度

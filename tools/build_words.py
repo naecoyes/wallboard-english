@@ -253,6 +253,9 @@ def main():
 
     ordered = sorted(words.values(), key=lambda x: (x['_frq'], x['w']))
     for x in ordered:
+        # 保留词典英文释义（词性 + 定义），最多展示前三项，不另行机器翻译
+        definition = ecdict.get(x['w'], {}).get('definition', '') or ''
+        x['enDefs'] = [line.strip() for line in definition.replace('\\n', '\n').splitlines() if line.strip()][:3]
         del x['_frq']
         if not x['forms']: del x['forms']
         if not x.get('notes'): x.pop('notes', None)

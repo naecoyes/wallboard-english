@@ -1,3 +1,7 @@
+:fullscreen { background: var(--bg); }
+.wm-english-defs { margin: .3rem 0 .6rem; padding-left: 1.4rem; font-size: 1.15rem; line-height: 1.5; }
+.wm-english-defs li + li { margin-top: .5rem; }
+
 /* ==========================================================
    WallBoard English · 设计系统
    白天：米白纸张 + 森林绿；夜间：深墨绿。粗圆体标题、扁平纸片卡片、柔和阴影。

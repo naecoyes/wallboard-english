@@ -5,6 +5,7 @@ import { newCard } from './srs.js';
 import { initWakeLock } from './wakelock.js';
 import { icon } from './icons.js';
 import { initTheme } from './theme.js';
+import { initFullscreen } from './fullscreen.js';
 import { renderStandby } from './modes/standby.js';
 import { renderMicro } from './modes/micro.js';
 import { renderFocus } from './modes/focus.js';
@@ -68,6 +69,7 @@ idleReset = resetIdle;
 
 // ---------- 启动 ----------
 initTheme();
+initFullscreen();
 initWakeLock();
 
 // Service Worker（离线缓存；file:// 下自动跳过）
