@@ -54,10 +54,17 @@ export function renderSettings(root) {
     renderAgain();
   });
   const mimoVoiceSel = h('select', {},
-    ...MIMO_VOICES.map(([v, t]) => h('option', { value: v, ...((s.settings.mimoVoice || 'Mia') === v ? { selected: '' } : {}) }, t)));
+    ...MIMO_VOICES.map(([v, t]) => h('option', { value: v, ...((s.settings.mimoVoice || 'Dean') === v ? { selected: '' } : {}) }, t)));
   mimoVoiceSel.addEventListener('change', () => {
     update(st => { st.settings.mimoVoice = mimoVoiceSel.value; });
     speak('Hello! This is how I sound.');
+  });
+  const prefetchSel = h('select', {},
+    ...[['smart', 'Smart (recommended)'], ['all', 'Everything on screen'], ['off', 'Off — generate on tap']].map(([v, t]) =>
+      h('option', { value: v, ...((s.settings.ttsPrefetch || 'smart') === v ? { selected: '' } : {}) }, t)));
+  prefetchSel.addEventListener('change', () => {
+    update(st => { st.settings.ttsPrefetch = prefetchSel.value; });
+    toast('Pre-generation saved');
   });
   const keyInput = h('input', {
     type: 'password', class: 'key-input', autocomplete: 'off', spellcheck: 'false', value: s.settings.mimoKey || '',
@@ -96,6 +103,9 @@ export function renderSettings(root) {
   const voiceGroup = group('Voice',
     row('volume', 'c-indigo', 'Voice engine', 'MiMo sounds more natural and needs internet; falls back to the system voice if it fails', providerSel),
     mimoOn ? row('mic', 'c-green', 'MiMo voice', null, mimoVoiceSel) : null,
+    mimoOn ? row('zap', 'c-amber', 'Pre-generate audio',
+      'Audio is prepared before you tap, so it plays instantly. Smart waits for a touch before preparing word examples, to save API usage',
+      prefetchSel) : null,
     mimoOn ? h('div', { class: 'row stack' },
       h('div', { class: 'row-top' },
         h('span', { class: 'r-ico c-amber' }, icon('sparkle', 20)),

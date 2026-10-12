@@ -7,7 +7,7 @@ import { get, addXP } from '../store.js';
 import { displayStreak, minutesToday, studyDay, hasCheckedInToday, dayStr } from '../streak.js';
 import { dueCards, addCard, reviewCard } from '../srs.js';
 import { DAILY } from '../content.js';
-import { speak, ttsAvailable } from '../tts.js';
+import { speak, ttsAvailable, prefetch } from '../tts.js';
 
 const TIPS = [
   "You don't need every word. Get the gist first, then make one or two lines your own.",
@@ -84,6 +84,7 @@ function build(root) {
   const item = dailyItem();
   const g = greeting(mins, goal, streak, checked);
   const now = new Date();
+  prefetch([item.en], { replace: true }); // 每日短语发音提前生成
   const doneModes = new Set(s.sessions.filter(x => studyDay(new Date(x.date)) === today).map(x => x.mode));
 
   // ---------- 问候 + 时钟 + 今日目标 ----------

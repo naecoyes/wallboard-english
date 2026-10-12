@@ -6,7 +6,7 @@ import { addXP, logSession } from '../store.js';
 import { addCard } from '../srs.js';
 import { checkIn, studyDay } from '../streak.js';
 import { PASSAGES } from '../content.js';
-import { speak, stopSpeak, ttsAvailable } from '../tts.js';
+import { speak, stopSpeak, ttsAvailable, prefetch } from '../tts.js';
 
 const TOTAL_SEC = 25 * 60;
 const STEPS = ['Listening', 'Shadowing', 'Phrases', 'Speaking', 'Wrap-up'];
@@ -90,6 +90,13 @@ export function renderFocus(root) {
     body.innerHTML = '';
     body.scrollTop = 0;
     paintStepper();
+    // 预生成本步骤要朗读的内容（整段 / 逐句 / 短语 / 问题）
+    prefetch(
+      step === 0 ? [passage.sentences.join(' ')]
+        : step === 1 ? passage.sentences
+          : step === 2 ? passage.phrases.map(p => p.en)
+            : step === 3 ? [passage.question] : [],
+      { replace: true });
 
     if (step === 0) { // 听力理解
       const textBlock = h('div', { class: 'passage-text', style: 'display:none' },

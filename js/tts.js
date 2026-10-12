@@ -10,10 +10,10 @@ import { toast } from './ui.js';
 export const MIMO_MODEL = 'mimo-v2.5-tts';
 export const MIMO_DEFAULT_ENDPOINT = 'https://api.xiaomimimo.com/v1/chat/completions';
 export const MIMO_VOICES = [
+  ['Dean', 'Dean · male'],
+  ['Milo', 'Milo · male'],
   ['Mia', 'Mia · female'],
   ['Chloe', 'Chloe · female'],
-  ['Milo', 'Milo · male'],
-  ['Dean', 'Dean · male'],
   ['mimo_default', 'MiMo default'],
 ];
 
@@ -29,7 +29,7 @@ function mimoConfig() {
   const s = get().settings;
   const key = (s.mimoKey || '').trim() || localKey;
   if (s.ttsProvider === 'system' || !key) return null;
-  return { key, voice: s.mimoVoice || 'Mia', endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT };
+  return { key, voice: s.mimoVoice || 'Dean', endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT };
 }
 
 /** 当前实际使用的引擎：'mimo' | 'system' | 'none' */
@@ -141,14 +141,14 @@ export const ttsCacheCount = () => idb('readonly', s => s.count());
 export async function clearTtsCache() { mem.clear(); await idb('readwrite', s => s.clear()); }
 
 // ---------- MiMo 请求 ----------
-let ctrl = null;
+// 每个请求有自己的超时；点击朗读和预生成共用同一个进行中的请求，不会重复调用接口
 async function fetchMimo(text, cfg) {
-  ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 30000);
   try {
     const r = await fetch(cfg.endpoint, {
       method: 'POST',
-      signal: ctrl.signal,
+      signal: ctl.signal,
       headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MIMO_MODEL,
@@ -159,7 +159,9 @@ async function fetchMimo(text, cfg) {
     if (!r.ok) {
       let msg = '';
       try { msg = (await r.json()).error?.message || ''; } catch { /* 非 JSON */ }
-      throw new Error(`HTTP ${r.status}${msg ? ' · ' + msg : ''}`);
+      const err = new Error(`HTTP ${r.status}${msg ? ' · ' + msg : ''}`);
+      err.status = r.status;
+      throw err;
     }
     const b64 = (await r.json()).choices?.[0]?.message?.audio?.data;
     if (!b64) throw new Error('No audio returned');
@@ -167,12 +169,78 @@ async function fetchMimo(text, cfg) {
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new Blob([bytes], { type: 'audio/mpeg' });
+  } catch (e) {
+    throw e.name === 'AbortError' ? new Error('request timed out') : e;
   } finally {
     clearTimeout(timer);
   }
 }
 
-// 「生成中」小提示
+const keyFor = (text, cfg) => `${cfg.voice}|${text}`;
+function remember(key, blob) {
+  if (mem.size > 300) mem.delete(mem.keys().next().value);
+  mem.set(key, blob);
+}
+const inflight = new Map(); // key -> Promise<Blob>
+
+/** 已缓存（内存或 IndexedDB）则直接返回，否则请求一次；同一段文本同时只会有一个请求 */
+async function getBlob(text, cfg) {
+  const key = keyFor(text, cfg);
+  const hit = mem.get(key) || await cacheGet(key);
+  if (hit) { remember(key, hit); return hit; }
+  if (inflight.has(key)) return inflight.get(key);
+  const p = fetchMimo(text, cfg)
+    .then(blob => { cachePut(key, blob); remember(key, blob); return blob; })
+    .finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
+
+// ---------- 预生成：页面展示时在后台把要朗读的内容先生成好，点击时直接播放 ----------
+let queue = [];
+let pumping = false;
+let prefetchPaused = 0; // 鉴权失败等情况下暂停一段时间，避免反复报错
+
+/** 预生成模式：smart（默认）/ all / off */
+export function prefetchMode() { return get().settings.ttsPrefetch || 'smart'; }
+
+/**
+ * 把一组文本加入预生成队列。
+ * replace=true 时丢弃上一屏还没生成的内容（换页时用），只保留当前屏幕的。
+ */
+export function prefetch(texts, { replace = false } = {}) {
+  const cfg = mimoConfig();
+  if (!cfg || prefetchMode() === 'off' || Date.now() < prefetchPaused) return;
+  const list = [...new Set(texts.filter(t => t && t.trim()))];
+  if (replace) queue = [];
+  for (const t of list) if (!queue.includes(t)) queue.push(t);
+  pump();
+}
+
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+  try {
+    while (queue.length) {
+      if (document.hidden) { queue = []; break; } // 熄屏 / 切后台时不在后台消耗额度
+      const cfg = mimoConfig();
+      if (!cfg) { queue = []; break; }
+      const text = queue.shift();
+      try {
+        await getBlob(text, cfg);
+      } catch (e) {
+        if (e.status === 401 || e.status === 403 || e.status === 429) { // Key 无效或限流：暂停 10 分钟
+          prefetchPaused = Date.now() + 10 * 60 * 1000;
+          queue = [];
+        }
+      }
+    }
+  } finally {
+    pumping = false;
+  }
+}
+
+// 「生成中」小提示（只有点击时还没生成好才会出现）
 let loadingEl = null;
 function setLoading(on) {
   if (on && !loadingEl) {
@@ -201,32 +269,26 @@ export async function speak(text, { rate } = {}) {
   const r = rate ?? get().settings.rate ?? 0.95;
   const cfg = mimoConfig();
   if (cfg) {
-    const key = `${cfg.voice}|${text}`;
     try {
-      let blob = mem.get(key) || await cacheGet(key);
-      if (!blob) {
-        setLoading(true);
-        blob = await fetchMimo(text, cfg);
-        cachePut(key, blob);
-      }
-      if (mem.size > 200) mem.delete(mem.keys().next().value);
-      mem.set(key, blob);
+      const key = keyFor(text, cfg);
+      if (!mem.has(key)) setLoading(true); // 已预生成好的不会闪提示
+      const blob = await getBlob(text, cfg);
       if (my !== seq) return false; // 期间又点了别的
       setLoading(false);
       return await playBlob(blob, r);
     } catch (e) {
-      if (my !== seq) return false; // 被 stopSpeak / 新的朗读打断，不算失败
+      if (my !== seq) return false;
       setLoading(false);
-      warn(e.name === 'AbortError' ? new Error('request timed out') : e);
+      warn(e);
     }
   }
   return speakSystem(text, r);
 }
 
+/** 停止播放。已发出的请求不取消：生成结果照样存进缓存，下次直接用 */
 export function stopSpeak() {
   seq++;
   setLoading(false);
-  if (ctrl) { ctrl.abort(); ctrl = null; }
   if (!audio.paused) audio.pause();
   if (finishCurrent) { finishCurrent(false); finishCurrent = null; }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
@@ -240,8 +302,9 @@ export async function testMimo(text = 'Practice a little every day, and you will
   try {
     const blob = await fetchMimo(text, cfg);
     const ms = Math.round(performance.now() - t0);
-    cachePut(`${cfg.voice}|${text}`, blob);
-    mem.set(`${cfg.voice}|${text}`, blob);
+    const key = keyFor(text, cfg);
+    cachePut(key, blob);
+    remember(key, blob);
     playBlob(blob, 1);
     return { ok: true, ms };
   } catch (e) {

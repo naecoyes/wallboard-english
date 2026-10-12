@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { addXP, logSession } from '../store.js';
 import { nextDueCard, reviewCard } from '../srs.js';
 import { DAILY, PASSAGES, QUICK_QUESTIONS } from '../content.js';
-import { speak, stopSpeak, ttsAvailable } from '../tts.js';
+import { speak, stopSpeak, ttsAvailable, prefetch } from '../tts.js';
 import { studyDay } from '../streak.js';
 
 let session = null; // { startedAt, tasksDone, lastCardId, ... }
@@ -39,6 +39,7 @@ function recallTask(root, next) {
   const front = card ? card.front : item.en;
   const backText = card ? card.back : item.zh;
   const example = card ? card.example : item.note;
+  prefetch([front], { replace: true });
 
   const answer = h('div', { class: 'answer', style: 'display:none' },
     h('div', {}, backText),
@@ -81,6 +82,7 @@ function shadowTask(root, next) {
   session.lastPassage = passage;
   const sentence = rand(passage.sentences, session.lastSentence);
   session.lastSentence = sentence;
+  prefetch([sentence], { replace: true });
 
   let done = false;
   root.append(taskCard('sky', 'repeat', 'Shadow one line',
@@ -101,6 +103,7 @@ function shadowTask(root, next) {
 function quickTask(root, next) {
   const q = rand(QUICK_QUESTIONS, session.lastQuestion);
   session.lastQuestion = q;
+  prefetch([q], { replace: true });
   let done = false;
   root.append(taskCard('amber', 'chat', 'Quick answer', 'Answer out loud in English — 2–3 sentences, no need to be perfect',
     h('div', { class: 'prompt' }, q),

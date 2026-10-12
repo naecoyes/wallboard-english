@@ -14,9 +14,11 @@ const defaults = () => ({
     dayStart: 7,       // 白天模式开始（时）
     dayEnd: 19,        // 白天模式结束（时）
     ttsProvider: 'mimo', // mimo 小米 MiMo（有 Key 时）/ system 系统语音
-    mimoVoice: 'Mia',
+    mimoVoice: 'Dean', // 默认男声
     mimoKey: '',       // 只存在本机，导出备份时会被去掉
     mimoEndpoint: '',  // 留空 = https://api.xiaomimimo.com/v1/chat/completions
+    ttsPrefetch: 'smart', // 预生成发音：smart 当前屏幕 + 下一个词（例句在有人操作时）/ all 全部 / off 关闭
+    voiceRev: 2,       // 默认音色版本：旧数据 <2 时迁移到男声
   },
   words: { idx: 0, known: [], unknown: [] }, // 单词模式进度：当前位置 / 太简单 / 不认识
   seeded: false,
@@ -40,6 +42,11 @@ function migrate(data) {
   const out = { ...d, ...data };
   out.profile = { ...d.profile, ...(data.profile || {}) };
   out.settings = { ...d.settings, ...(data.settings || {}) };
+  // 一次性迁移：默认音色从女声 Mia 改为男声 Dean（之前没有 voiceRev 字段）
+  if (!(data.settings && data.settings.voiceRev >= 2)) {
+    out.settings.mimoVoice = 'Dean';
+    out.settings.voiceRev = 2;
+  }
   out.words = { ...d.words, ...(data.words || {}) };
   out.cards = Array.isArray(data.cards) ? data.cards : [];
   out.sessions = Array.isArray(data.sessions) ? data.sessions : [];

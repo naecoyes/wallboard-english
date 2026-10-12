@@ -6,7 +6,7 @@ import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
 import { displayStreak, minutesToday } from '../streak.js';
-import { speak, stopSpeak, ttsAvailable } from '../tts.js';
+import { speak, stopSpeak, ttsAvailable, prefetch, prefetchMode } from '../tts.js';
 
 let WORDS = null;
 const say = (text) => ttsAvailable() ? speak(text) : toast('No English voice available');
@@ -45,6 +45,7 @@ export function renderWord(root) {
   let cur = -1;
   let left = autoSec;
   let alive = true;
+  let curExamples = []; // 当前词的例句文本（触摸时预生成）
 
   // ---------- 头部：进度 + 迷你状态 ----------
   const sub = h('div', { class: 'sub' }, 'Loading IELTS word list…');
@@ -180,6 +181,12 @@ export function renderWord(root) {
 
     body.append(hero, h('div', { class: 'wm-side' }, exCard, notesCard));
 
+    // 预生成发音：当前词 → 下一个词（自动切换时直接就绪）→ 例句
+    // smart 模式下例句要等有人触摸屏幕才生成，避免无人时每 45 秒消耗多次额度
+    curExamples = w.ex.map(e => e[0]);
+    const nxt = findIndex(cur + 1);
+    prefetch([w.w, nxt >= 0 ? WORDS[nxt].w : null, ...(prefetchMode() === 'all' ? curExamples : [])], { replace: true });
+
     // 单词按卡片宽度自动缩字号，长词也不会从中间断开
     const wordEl = hero.querySelector('.wm-word');
     requestAnimationFrame(() => {
@@ -206,7 +213,10 @@ export function renderWord(root) {
   }, 1000);
 
   // 有人操作时重新计时，避免正在看就被切走
-  const onTouch = () => { left = autoSec; barFill.style.width = '0%'; };
+  const onTouch = () => {
+    left = autoSec; barFill.style.width = '0%';
+    if (curExamples.length) prefetch(curExamples); // 有人在看：把例句也准备好
+  };
   const onKey = (e) => { if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); } };
   wrap.addEventListener('pointerdown', onTouch);
   document.addEventListener('keydown', onKey);
