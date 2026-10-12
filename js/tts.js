@@ -1,0 +1,250 @@
+// tts.js — 发音：优先小米 MiMo（mimo-v2.5-tts），失败或未配置时回退到系统语音（Web Speech API）
+// 对外接口不变：speak(text, {rate}) / stopSpeak() / ttsAvailable() / englishVoices()
+//
+// MiMo 接口：POST https://api.xiaomimimo.com/v1/chat/completions（OpenAI 兼容，允许浏览器跨域调用）
+//   要合成的文本放在 role=assistant 的消息里，返回 choices[0].message.audio.data（base64 mp3）
+// 同一段文本只请求一次：结果存在 IndexedDB，挂墙反复播放不重复计费。
+import { get } from './store.js';
+import { toast } from './ui.js';
+
+export const MIMO_MODEL = 'mimo-v2.5-tts';
+export const MIMO_DEFAULT_ENDPOINT = 'https://api.xiaomimimo.com/v1/chat/completions';
+export const MIMO_VOICES = [
+  ['Mia', 'Mia · 英文女声'],
+  ['Chloe', 'Chloe · 英文女声'],
+  ['Milo', 'Milo · 英文男声'],
+  ['Dean', 'Dean · 英文男声'],
+  ['mimo_default', 'MiMo 默认'],
+];
+
+// ---------- 本地配置（可选）：js/config.local.js 里放 API Key，免得在平板上手输 ----------
+let localKey = '';
+/** 本地配置加载完成（无论文件是否存在）后 resolve */
+export const ttsConfigReady = import('./config.local.js')
+  .then(m => { localKey = (m.MIMO_API_KEY || '').trim(); })
+  .catch(() => {});
+export function localKeyPresent() { return !!localKey; }
+
+function mimoConfig() {
+  const s = get().settings;
+  const key = (s.mimoKey || '').trim() || localKey;
+  if (s.ttsProvider === 'system' || !key) return null;
+  return { key, voice: s.mimoVoice || 'Mia', endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT };
+}
+
+/** 当前实际使用的引擎：'mimo' | 'system' | 'none' */
+export function ttsEngine() {
+  if (mimoConfig()) return 'mimo';
+  return 'speechSynthesis' in window ? 'system' : 'none';
+}
+
+// ---------- 系统语音 ----------
+let voicesCache = [];
+function refreshVoices() { voicesCache = window.speechSynthesis ? speechSynthesis.getVoices() : []; }
+if ('speechSynthesis' in window) {
+  refreshVoices();
+  speechSynthesis.onvoiceschanged = refreshVoices;
+}
+export function englishVoices() { return voicesCache.filter(v => v.lang.toLowerCase().startsWith('en')); }
+export function ttsAvailable() { return ttsEngine() !== 'none'; }
+
+function pickVoice() {
+  const saved = get().settings.voiceURI;
+  const ens = englishVoices();
+  if (saved) {
+    const v = ens.find(v => v.voiceURI === saved);
+    if (v) return v;
+  }
+  return ens.find(v => v.lang === 'en-US') || ens[0] || null;
+}
+
+function speakSystem(text, rate) {
+  return new Promise(resolve => {
+    if (!('speechSynthesis' in window)) return resolve(false);
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice();
+    if (v) u.voice = v;
+    u.lang = v ? v.lang : 'en-US';
+    u.rate = rate;
+    u.onend = () => resolve(true);
+    u.onerror = () => resolve(false);
+    speechSynthesis.speak(u);
+  });
+}
+
+// ---------- 音频播放（共用一个 <audio>，首次触摸时解锁，移动端浏览器才允许之后自动播放） ----------
+const audio = new Audio();
+audio.preload = 'auto';
+let currentUrl = null;
+let finishCurrent = null;
+
+function silentWav() {
+  const n = 1200, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 24000, true); v.setUint32(28, 48000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+document.addEventListener('pointerdown', () => {
+  if (audio.src) return;
+  audio.src = silentWav();
+  audio.play().catch(() => {});
+}, { once: true, capture: true });
+
+function playBlob(blob, rate) {
+  return new Promise(resolve => {
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = URL.createObjectURL(blob);
+    finishCurrent = resolve;
+    audio.onended = () => { finishCurrent = null; resolve(true); };
+    audio.onerror = () => { finishCurrent = null; resolve(false); };
+    audio.src = currentUrl;
+    audio.playbackRate = rate;
+    audio.preservesPitch = true;
+    audio.play().catch(err => {
+      finishCurrent = null;
+      if (err && err.name === 'NotAllowedError') toast('浏览器拦截了自动播放，点一下屏幕再试');
+      resolve(false);
+    });
+  });
+}
+
+// ---------- IndexedDB 缓存 ----------
+const mem = new Map();
+let dbPromise = null;
+function db() {
+  if (!('indexedDB' in window)) return Promise.reject(new Error('no indexedDB'));
+  dbPromise ??= new Promise((res, rej) => {
+    const r = indexedDB.open('wallboard-tts', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('clips');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  return dbPromise;
+}
+async function idb(mode, fn) {
+  try {
+    const d = await db();
+    return await new Promise(res => {
+      const req = fn(d.transaction('clips', mode).objectStore('clips'));
+      req.onsuccess = () => res(req.result ?? null);
+      req.onerror = () => res(null);
+    });
+  } catch { return null; }
+}
+const cacheGet = (k) => idb('readonly', s => s.get(k));
+const cachePut = (k, blob) => idb('readwrite', s => s.put(blob, k));
+export const ttsCacheCount = () => idb('readonly', s => s.count());
+export async function clearTtsCache() { mem.clear(); await idb('readwrite', s => s.clear()); }
+
+// ---------- MiMo 请求 ----------
+let ctrl = null;
+async function fetchMimo(text, cfg) {
+  ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const r = await fetch(cfg.endpoint, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MIMO_MODEL,
+        messages: [{ role: 'assistant', content: text }],
+        audio: { format: 'mp3', voice: cfg.voice },
+      }),
+    });
+    if (!r.ok) {
+      let msg = '';
+      try { msg = (await r.json()).error?.message || ''; } catch { /* 非 JSON */ }
+      throw new Error(`HTTP ${r.status}${msg ? ' · ' + msg : ''}`);
+    }
+    const b64 = (await r.json()).choices?.[0]?.message?.audio?.data;
+    if (!b64) throw new Error('接口没有返回音频');
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: 'audio/mpeg' });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 「生成中」小提示
+let loadingEl = null;
+function setLoading(on) {
+  if (on && !loadingEl) {
+    loadingEl = document.createElement('div');
+    loadingEl.className = 'tts-loading';
+    loadingEl.innerHTML = '<span class="spin"></span>MiMo 生成发音…';
+    document.body.append(loadingEl);
+  } else if (!on && loadingEl) {
+    loadingEl.remove();
+    loadingEl = null;
+  }
+}
+
+let lastWarn = 0;
+function warn(e) {
+  if (Date.now() - lastWarn < 60000) return;
+  lastWarn = Date.now();
+  toast(`MiMo 发音失败，已改用系统语音（${e.message}）`);
+}
+
+let seq = 0;
+/** 朗读英文文本，返回 Promise（播完或失败时 resolve） */
+export async function speak(text, { rate } = {}) {
+  stopSpeak();
+  const my = ++seq;
+  const r = rate ?? get().settings.rate ?? 0.95;
+  const cfg = mimoConfig();
+  if (cfg) {
+    const key = `${cfg.voice}|${text}`;
+    try {
+      let blob = mem.get(key) || await cacheGet(key);
+      if (!blob) {
+        setLoading(true);
+        blob = await fetchMimo(text, cfg);
+        cachePut(key, blob);
+      }
+      if (mem.size > 200) mem.delete(mem.keys().next().value);
+      mem.set(key, blob);
+      if (my !== seq) return false; // 期间又点了别的
+      setLoading(false);
+      return await playBlob(blob, r);
+    } catch (e) {
+      if (my !== seq) return false; // 被 stopSpeak / 新的朗读打断，不算失败
+      setLoading(false);
+      warn(e.name === 'AbortError' ? new Error('请求超时') : e);
+    }
+  }
+  return speakSystem(text, r);
+}
+
+export function stopSpeak() {
+  seq++;
+  setLoading(false);
+  if (ctrl) { ctrl.abort(); ctrl = null; }
+  if (!audio.paused) audio.pause();
+  if (finishCurrent) { finishCurrent(false); finishCurrent = null; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+/** 设置页「测试连接」：直接请求一次，返回 {ok, ms, error} */
+export async function testMimo(text = 'Practice a little every day, and you will improve.') {
+  const cfg = mimoConfig();
+  if (!cfg) return { ok: false, error: '未填写 API Key 或已选择系统语音' };
+  const t0 = performance.now();
+  try {
+    const blob = await fetchMimo(text, cfg);
+    const ms = Math.round(performance.now() - t0);
+    cachePut(`${cfg.voice}|${text}`, blob);
+    mem.set(`${cfg.voice}|${text}`, blob);
+    playBlob(blob, 1);
+    return { ok: true, ms };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}

@@ -1,0 +1,6 @@
+# 本机私有配置（含 API Key），不要提交 / 发布
+js/config.local.js
+# 词库构建用的原始数据缓存
+tools/.cache/
+# 预览截图
+.preview-*.png
