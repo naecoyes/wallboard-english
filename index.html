@@ -21,6 +21,9 @@
     else if (mode === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     else { var d = new Date(), h = d.getHours() + d.getMinutes() / 60; t = h >= (s.dayStart ?? 7) && h < (s.dayEnd ?? 19) ? 'light' : 'dark'; }
     document.documentElement.dataset.theme = t;
+    var pal = new URLSearchParams(location.search).get('palette') || s.palette || 'forest';
+    if (!/^(forest|ocean|terracotta|lavender|rose|graphite)$/.test(pal)) pal = 'forest';
+    document.documentElement.dataset.palette = pal;
   })();
 </script>
 <link rel="stylesheet" href="css/main.css">

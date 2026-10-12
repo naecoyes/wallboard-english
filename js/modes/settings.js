@@ -7,7 +7,7 @@ import {
   localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady,
 } from '../tts.js';
 import { wakeLockSupported, wakeLockActive, requestWakeLock } from '../wakelock.js';
-import { applyTheme, currentTheme } from '../theme.js';
+import { applyTheme, currentTheme, currentPalette, PALETTES } from '../theme.js';
 
 function row(ico, color, label, desc, ...controls) {
   return h('div', { class: 'row' },
@@ -186,7 +186,34 @@ export function renderSettings(root) {
     });
     return sel;
   };
+  // 配色主题：每张色板显示 白天背景 | 白天主色 | 夜间主色，右下角圆点为强调色
+  const paletteBtns = PALETTES.map(p => {
+    const btn = h('button', {
+      class: 'palette' + (currentPalette() === p.id ? ' on' : ''), 'aria-label': p.name,
+      onclick: () => {
+        update(st => { st.settings.palette = p.id; });
+        applyTheme();
+        paletteBtns.forEach(b => b.classList.toggle('on', b === btn));
+        toast(`${p.name} theme`);
+      },
+    },
+      h('span', { class: 'sw' },
+        h('i', { style: `background:${p.day[0]}` }), h('i', { style: `background:${p.day[1]}` }), h('i', { style: `background:${p.night[1]}` }),
+        h('b', { style: `background:${p.day[2]}` })),
+      h('span', { class: 'nm' }, p.name, icon('check', 14)));
+    return btn;
+  });
+  paletteBtns.forEach(b => { if (!b.classList.contains('on')) b.querySelector('.nm .ico').style.visibility = 'hidden'; });
+  // 选中标记跟随
+  const syncChecks = () => paletteBtns.forEach(b => { b.querySelector('.nm .ico').style.visibility = b.classList.contains('on') ? 'visible' : 'hidden'; });
+  paletteBtns.forEach(b => b.addEventListener('click', syncChecks));
+
   const displayGroup = group('Display',
+    h('div', { class: 'row stack' },
+      h('div', { class: 'row-top' },
+        h('span', { class: 'r-ico c-green' }, icon('sparkle', 20)),
+        h('div', { class: 'r-label' }, 'Color theme', h('small', {}, 'Each theme has its own day and night version'))),
+      h('div', { class: 'palette-grid' }, ...paletteBtns)),
     row('sun', 'c-amber', 'Day / night', `Now: ${currentTheme() === 'light' ? 'day' : 'night'}`, themeSel),
     row('timer', 'c-sky', 'Daytime hours', 'In Auto mode, the day palette is used between these hours',
       hourSel('dayStart', 5, 10), h('span', { class: 'setting-dash' }, 'to'), hourSel('dayEnd', 16, 22)));
