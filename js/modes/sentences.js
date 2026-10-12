@@ -3,6 +3,7 @@
 // 句库约 150 KB，进入本页时才按需加载
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
+import { AdvanceClock } from '../auto-advance.js';
 import { get, update, addXP } from '../store.js';
 import { addCard } from '../srs.js';
 import { speak, stopSpeak, ttsAvailable, prefetch, staticAudioReady } from '../tts.js';
@@ -19,10 +20,30 @@ export function renderSentences(root) {
   let pos = 0;
   let revealed = false;
   let alive = true;
+  let viewRevision = 0;
+  const autoSec = get().settings.sentenceAutoSec ?? 45;
+  const advance = new AdvanceClock(autoSec, performance.now(), !document.hidden);
+  let progressFill = null;
+  const countdown = h('span', { class: 'chip' });
+  const pauseButton = h('button', {
+    type: 'button', class: 'btn sm ghost', ...(autoSec ? {} : { disabled: '' }),
+    onclick: () => {
+      advance.setPaused(performance.now(), !advance.paused);
+      pauseButton.textContent = advance.paused ? 'Resume auto' : 'Pause auto';
+      updateCountdown();
+    },
+  }, 'Pause auto');
+  if (autoSec) pauseButton.removeAttribute('disabled');
+  function updateCountdown() {
+    countdown.textContent = autoSec === 0 ? 'Auto: off'
+      : `${advance.paused ? 'Paused' : 'Next in'} ${Math.ceil(advance.remaining / 1000)} s`;
+    if (progressFill) progressFill.style.width = `${autoSec ? (1 - advance.remaining / advance.duration) * 100 : 0}%`;
+  }
 
   const sub = h('div', { class: 'sub' }, 'Loading sentences…');
   const head = h('div', { class: 'mode-head' },
-    h('div', {}, h('h1', {}, icon('chat', 24), 'Daily Sentences'), sub));
+    h('div', {}, h('h1', {}, icon('chat', 24), 'Daily Sentences'), sub),
+    h('div', { class: 'btn-group' }, countdown, pauseButton));
   const chips = h('div', { class: 'sn-chips' });
   const body = h('div', { class: 'wm-body sn-body' });
   const wrap = h('div', { class: 'word-mode' }, head, chips, body);
@@ -71,6 +92,10 @@ export function renderSentences(root) {
   }
 
   function paint(autoPlay) {
+    const revision = ++viewRevision;
+    advance.reset(performance.now());
+    progressFill = h('i', {});
+    updateCountdown();
     body.innerHTML = '';
     revealed = false;
     const k = known();
@@ -127,7 +152,8 @@ export function renderSentences(root) {
       h('div', { class: 'wm-spacer' }),
       h('div', { class: 'sn-nav' },
         h('button', { class: 'sn-prev', 'aria-label': 'Previous', onclick: () => go(pos - 1) }, icon('arrowRight', 22)),
-        h('button', { class: 'wm-next', onclick: () => go(pos + 1) }, 'Next', icon('arrowRight', 22))));
+        h('button', { class: 'wm-next', onclick: () => go(pos + 1) }, 'Next', icon('arrowRight', 22),
+          autoSec ? h('span', { class: 'wm-auto' }, progressFill) : null)));
 
     // ---------- 右：当前场景的句子列表 ----------
     const items = list.map((x, i) => h('button', {
@@ -148,9 +174,8 @@ export function renderSentences(root) {
     // 预生成：当前句 + 后面两句（都是随站点发布的音频文件，不耗额度）
     prefetch([s.en, list[(pos + 1) % list.length].en, list[(pos + 2) % list.length].en], { replace: true });
     if (autoPlay && get().settings.wordAutoPlay !== false) {
-      const shown = pos;
       staticAudioReady.then(() => setTimeout(() => {
-        if (alive && shown === pos && !document.hidden) speak(s.en, { auto: true });
+        if (alive && revision === viewRevision && !document.hidden) speak(s.en, { auto: true });
       }, 250));
     }
   }
@@ -161,6 +186,22 @@ export function renderSentences(root) {
     else if (e.key === ' ') { e.preventDefault(); body.querySelector('.sn-actions .sn-pill')?.click(); }
   };
   document.addEventListener('keydown', onKey);
+  const resetCountdown = () => { advance.reset(performance.now()); updateCountdown(); };
+  const onVisibility = () => {
+    advance.setVisible(performance.now(), !document.hidden);
+    if (document.hidden) { viewRevision++; stopSpeak(); }
+    updateCountdown();
+  };
+  wrap.addEventListener('pointerdown', resetCountdown);
+  wrap.addEventListener('wheel', resetCountdown, { passive: true });
+  document.addEventListener('keydown', resetCountdown);
+  document.addEventListener('visibilitychange', onVisibility);
+  const advanceInterval = setInterval(() => {
+    if (!list.length) { advance.reset(performance.now()); return; }
+    if (advance.tick(performance.now())) go(pos + 1);
+    updateCountdown();
+  }, 250);
+  updateCountdown();
 
   import('../sentences.js')
     .then(m => {
@@ -173,5 +214,10 @@ export function renderSentences(root) {
     })
     .catch(e => { sub.textContent = 'Could not load sentences: ' + e.message; });
 
-  return () => { alive = false; stopSpeak(); document.removeEventListener('keydown', onKey); };
+  return () => {
+    alive = false; viewRevision++; clearInterval(advanceInterval); stopSpeak();
+    document.removeEventListener('keydown', onKey);
+    document.removeEventListener('keydown', resetCountdown);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
 }

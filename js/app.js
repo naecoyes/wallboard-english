@@ -61,7 +61,7 @@ let idleReset = null;
 function resetIdle() {
   clearTimeout(idleTimer);
   const hash = location.hash || '';
-  if (hash === '#focus' || hash === '#word') return; // 专注有自己的计时；单词模式本身就是待机内容
+  if (hash === '#focus' || hash === '#word' || hash === '#sentences') return; // 专注有自己的计时；单词模式本身就是待机内容
   const idleMs = Math.max(1, get().settings.idleMin || 2) * 60 * 1000;
   idleTimer = setTimeout(() => { location.hash = '#word'; }, idleMs);
 }
