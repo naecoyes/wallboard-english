@@ -127,6 +127,31 @@ export function renderWord(root) {
       ...(w.tags || []).map(t => h('span', { class: 'wm-tag' + (t === 'ielts' ? ' main' : '') }, TAG_NAME[t] || t)),
       w.collins ? h('span', { class: 'wm-stars', title: `Collins ${w.collins}-star` }, '★'.repeat(w.collins) + '☆'.repeat(5 - w.collins)) : null);
 
+    let chineseFace = false;
+    const meaningContent = h('div', { class: 'wm-meaning-content' });
+    const meaningHint = h('span', { class: 'wm-meaning-hint' });
+    const meaningButton = h('button', {
+      type: 'button', class: 'wm-meaning-flip', 'aria-pressed': 'false',
+      onclick: () => { chineseFace = !chineseFace; paintMeaning(); },
+    }, meaningContent, meaningHint);
+    function paintMeaning() {
+      meaningContent.replaceChildren();
+      meaningButton.setAttribute('aria-pressed', String(chineseFace));
+      meaningButton.setAttribute('aria-label', chineseFace ? 'Show English meaning' : 'Show Chinese meaning');
+      if (chineseFace) {
+        meaningContent.append(h('div', { class: 'wm-defs' },
+          ...w.defs.map(([pos, zh]) => h('div', { class: 'wm-def' },
+            pos ? h('span', { class: 'wm-pos' }, pos) : null, h('span', { class: 'wm-zh' }, zh)))));
+        meaningHint.textContent = 'CHINESE MEANING · Tap to return to English';
+      } else {
+        meaningContent.append(w.enDefs?.length
+          ? h('ol', { class: 'wm-english-defs' }, ...w.enDefs.map(d => h('li', {}, d)))
+          : h('p', {}, 'English definition unavailable in this dictionary.'));
+        meaningHint.textContent = 'ENGLISH MEANING · Tap to flip to Chinese';
+      }
+    }
+    paintMeaning();
+
     const hero = h('section', { class: 'wm-hero glass' },
       h('div', { class: 'wm-top' },
         h('div', { class: 'wm-word', style: 'font-size:5.25rem' }, w.w),
@@ -135,9 +160,7 @@ export function renderWord(root) {
         h('span', { class: 'wm-ipa' }, w.ipa),
         h('div', { class: 'wm-pills' }, unknownBtn, h('span', { class: 'wm-sep' }), easyBtn)),
       tagRow,
-      h('div', { class: 'wm-defs' },
-        ...w.defs.map(([pos, zh]) => h('div', { class: 'wm-def' },
-          pos ? h('span', { class: 'wm-pos' }, pos) : null, h('span', { class: 'wm-zh' }, zh)))),
+      meaningButton,
       h('div', { class: 'wm-spacer' }),
       h('button', { class: 'wm-next', onclick: next },
         'Next', icon('arrowRight', 22),
@@ -162,12 +185,23 @@ export function renderWord(root) {
     // ---------- 右：例句 ----------
     const exCard = h('section', { class: 'wm-card glass' },
       h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, `EXAMPLES · ${w.ex.length}`)),
-      ...w.ex.map(([en, zh, eid], i) => h('div', { class: 'wm-ex' + (i === 0 ? ' first' : '') },
-        h('div', { class: 'wm-ex-main' },
-          h('div', { class: 'wm-en' }, highlight(en, w)),
-          h('div', { class: 'wm-cn' }, zh),
-          h('div', { class: 'wm-src' }, eid ? `Source: Tatoeba #${eid} · CC BY 2.0 FR` : 'Source: original')),
-        h('button', { class: 'icon-btn sm', 'aria-label': 'Read example', onclick: () => say(en) }, icon('volume', 18)))));
+      ...w.ex.map(([en, zh, eid], i) => {
+        const translation = h('div', { class: 'wm-cn', hidden: '' }, zh);
+        const reveal = h('button', {
+          type: 'button', class: 'wm-translation-toggle', 'aria-expanded': 'false',
+          onclick: () => {
+            translation.hidden = !translation.hidden;
+            reveal.textContent = translation.hidden ? 'Reveal translation' : 'Hide translation';
+            reveal.setAttribute('aria-expanded', String(!translation.hidden));
+          },
+        }, 'Reveal translation');
+        return h('div', { class: 'wm-ex' + (i === 0 ? ' first' : '') },
+          h('div', { class: 'wm-ex-main' },
+            h('div', { class: 'wm-en' }, highlight(en, w)),
+            reveal, translation,
+            h('div', { class: 'wm-src' }, eid ? `Source: Tatoeba #${eid} · CC BY 2.0 FR` : 'Source: original')),
+          h('button', { class: 'icon-btn sm', 'aria-label': 'Read example', onclick: () => say(en) }, icon('volume', 18)));
+      }));
 
     // ---------- 右：单词笔记（辨析 / 搭配，仅原创词条有） ----------
     const noteGroups = [];
@@ -179,13 +213,20 @@ export function renderWord(root) {
       ? h('section', { class: 'wm-card glass' }, h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'NOTES')), ...noteGroups)
       : null;
 
-    const definitionCard = h('section', { class: 'wm-card glass' },
-      h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'ENGLISH MEANING')),
-      w.enDefs?.length
-        ? h('ol', { class: 'wm-english-defs' }, ...w.enDefs.map(d => h('li', {}, d)))
-        : h('p', { class: 'wm-cn' }, 'English definition unavailable in this dictionary.'),
-      h('div', { class: 'wm-src' }, 'Source: ECDICT'));
-    body.append(hero, h('div', { class: 'wm-side' }, definitionCard, exCard, notesCard));
+    if (notesCard) {
+      const contents = h('div', { hidden: '' });
+      contents.append(...noteGroups);
+      const toggle = h('button', {
+        type: 'button', class: 'wm-translation-toggle', 'aria-expanded': 'false',
+        onclick: () => {
+          contents.hidden = !contents.hidden;
+          toggle.textContent = contents.hidden ? 'Reveal notes' : 'Hide notes';
+          toggle.setAttribute('aria-expanded', String(!contents.hidden));
+        },
+      }, 'Reveal notes');
+      notesCard.replaceChildren(h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'NOTES'), toggle), contents);
+    }
+    body.append(hero, h('div', { class: 'wm-side' }, exCard, notesCard));
 
     // 预生成发音：当前词 → 下一个词（自动切换时直接就绪）→ 例句
     // smart 模式下例句要等有人触摸屏幕才生成，避免无人时每 45 秒消耗多次额度

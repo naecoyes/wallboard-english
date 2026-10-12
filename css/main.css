@@ -1,6 +1,13 @@
 :fullscreen { background: var(--bg); }
 .wm-english-defs { margin: .3rem 0 .6rem; padding-left: 1.4rem; font-size: 1.15rem; line-height: 1.5; }
 .wm-english-defs li + li { margin-top: .5rem; }
+[hidden] { display: none !important; }
+.wm-meaning-flip { display: block; width: 100%; min-height: 0; flex-shrink: 1; margin-top: 1.25rem; padding: 1rem 1.1rem; border: 1px solid rgba(255,255,255,.28); border-radius: 1rem; background: rgba(255,255,255,.08); color: #fffefa; text-align: left; overflow-y: auto; }
+.wm-meaning-flip:hover { background: rgba(255,255,255,.13); }
+.wm-meaning-flip .wm-defs { margin-top: 0; }
+.wm-meaning-hint { display: block; margin-top: .75rem; color: var(--hero-muted); font-size: .72rem; font-weight: 750; }
+.wm-translation-toggle { padding: .3rem 0; border: none; background: transparent; color: var(--green); font-size: .8rem; font-weight: 750; }
+.wm-translation-toggle + .wm-cn { margin-top: .3rem; }
 
 /* ==========================================================
    WallBoard English · 设计系统
