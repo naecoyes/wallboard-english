@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v12'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v13'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 const ASSETS = [
   './',
   './index.html',

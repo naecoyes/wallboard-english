@@ -1,4 +1,4 @@
-// standby.js — 今日仪表盘（EchoEnglish 风格，横屏一屏放下）
+// standby.js — 今日仪表盘（横屏一屏放下）
 // 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、该复习了、小提醒
 // 所有数字都来自真实学习记录（sessions / 卡组 / 打卡），不是手动勾选
 import { h, toast } from '../ui.js';
@@ -92,8 +92,8 @@ function build(root) {
   const dateEl = h('small', {}, now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase());
   const greet = h('section', { class: 'ec-greet' },
     h('div', {},
-      h('div', { class: 'eyebrow' }, `${g.label} · A LITTLE ENGLISH, EVERY DAY`),
-      h('h1', {}, 'Make it daily. ', h('span', {}, 'Start where you are.')),
+      h('div', { class: 'eyebrow' }, `${g.label} · YOUR ENGLISH WALL`),
+      h('h1', {}, 'Learn a little, ', h('span', {}, 'every single day.')),
       h('p', { class: g.cls }, g.text)),
     h('div', { class: 'ec-greet-right' },
       h('div', { class: 'ec-clock' }, clockEl, dateEl),

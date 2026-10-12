@@ -1,5 +1,5 @@
 /* ==========================================================
-   EchoEnglish · 设计系统（参考 echoenglish_wall_coach_final.html）
+   WallBoard English · 设计系统
    白天：米白纸张 + 森林绿；夜间：深墨绿。粗圆体标题、扁平纸片卡片、柔和阴影。
 
    自适应：尺寸全部用 rem，根字号随视口等比缩放
@@ -279,7 +279,7 @@ html[data-theme="dark"] .seg a, html[data-theme="dark"] .nav-icon { background: 
 }
 
 /* ==========================================================
-   待机页：EchoEnglish 仪表盘（横屏一屏放下）
+   待机页：今日仪表盘（横屏一屏放下）
    ========================================================== */
 .ec-dash { max-width: var(--content-max); margin: 0 auto; display: flex; flex-direction: column; gap: .875rem; min-height: 100%; }
 

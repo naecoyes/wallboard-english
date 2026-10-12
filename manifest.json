@@ -1,7 +1,7 @@
 {
-  "name": "EchoEnglish · Your Daily English Coach",
-  "short_name": "EchoEnglish",
-  "description": "A wall-mounted daily English coach: phrases, IELTS words, spaced review and streaks.",
+  "name": "WallBoard English",
+  "short_name": "WallBoard",
+  "description": "A wall-mounted English study board: phrases, IELTS words, spaced review and streaks.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
