@@ -346,6 +346,23 @@ export async function speak(text, { rate, auto = false } = {}) {
   return speakSystem(text, r);
 }
 
+/** Play in order; any stop or a competing utterance cancels the remaining items. */
+export async function speakSequence(texts, options = {}) {
+  const list = texts.filter(Boolean);
+  prefetch(list);
+  for (let i = 0; i < list.length; i++) {
+    const playing = speak(list[i], options);
+    const expected = seq;
+    const ok = await playing;
+    if (!ok || seq !== expected) return false;
+    if (i < list.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      if (seq !== expected || document.hidden) return false;
+    }
+  }
+  return true;
+}
+
 /** 停止播放。已发出的请求不取消：生成结果照样存进缓存，下次直接用 */
 export function stopSpeak() {
   seq++;

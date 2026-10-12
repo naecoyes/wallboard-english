@@ -6,7 +6,7 @@ import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
 import { displayStreak, minutesToday } from '../streak.js';
-import { speak, stopSpeak, ttsAvailable, prefetch, prefetchMode, staticAudioReady } from '../tts.js';
+import { speak, speakSequence, stopSpeak, ttsAvailable, prefetch, prefetchMode, staticAudioReady } from '../tts.js';
 
 let WORDS = null;
 const say = (text) => ttsAvailable() ? speak(text) : toast('No English voice available');
@@ -155,7 +155,7 @@ export function renderWord(root) {
     const hero = h('section', { class: 'wm-hero glass' },
       h('div', { class: 'wm-top' },
         h('div', { class: 'wm-word', style: 'font-size:5.25rem' }, w.w),
-        h('button', { class: 'wm-speak', 'aria-label': 'Say the word', onclick: () => say(w.w) }, icon('volume', 30))),
+        h('button', { class: 'wm-speak', 'aria-label': 'Read word and example', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, icon('volume', 30))),
       h('div', { class: 'wm-ipa-row' },
         h('span', { class: 'wm-ipa' }, w.ipa),
         h('div', { class: 'wm-pills' }, unknownBtn, h('span', { class: 'wm-sep' }), easyBtn)),
@@ -232,13 +232,13 @@ export function renderWord(root) {
     // smart 模式下例句要等有人触摸屏幕才生成，避免无人时每 45 秒消耗多次额度
     curExamples = w.ex.map(e => e[0]);
     const nxt = findIndex(cur + 1);
-    prefetch([w.w, nxt >= 0 ? WORDS[nxt].w : null, ...(prefetchMode() === 'all' ? curExamples : [])], { replace: true });
+    prefetch([w.w, w.ex?.[0]?.[0], nxt >= 0 ? WORDS[nxt].w : null, ...(prefetchMode() === 'all' ? curExamples : [])], { replace: true });
 
     // 切换到新词时自动读一遍（设置里可关闭）；熄屏 / 切后台时不读
     if (get().settings.wordAutoPlay !== false) {
       const shown = cur;
       staticAudioReady.then(() => setTimeout(() => {
-        if (alive && shown === cur && !document.hidden) speak(w.w, { auto: true });
+        if (alive && shown === cur && !document.hidden) speakSequence([w.w, w.ex?.[0]?.[0]], { auto: true });
       }, 400));
     }
 
