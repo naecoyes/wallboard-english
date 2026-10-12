@@ -25,22 +25,42 @@ export const ttsConfigReady = import('./config.local.js')
   .catch(() => {});
 export function localKeyPresent() { return !!localKey; }
 
-// ---------- 预生成的单词发音（audio/words，随网站发布，由 tools/gen_audio.py 生成） ----------
-let staticIdx = null; // { voice, set }
-export const staticAudioReady = fetch('audio/words/index.json', { cache: 'no-cache' })
-  .then(r => (r.ok ? r.json() : null))
-  .then(d => { if (d && Array.isArray(d.words)) staticIdx = { voice: d.voice, set: new Set(d.words) }; })
-  .catch(() => {});
-export function staticAudioInfo() { return staticIdx ? { voice: staticIdx.voice, count: staticIdx.set.size } : null; }
+// ---------- 预生成的发音（随网站发布，由 tools/gen_audio.py 生成，不需要 API Key） ----------
+//   audio/words/<单词>.mp3   单词
+//   audio/s/<哈希>.mp3       句子 / 短语 / 短文，文件名 = 文本的 FNV-1a 64 位哈希
+let staticIdx = null; // { voice, words:Set, ids:Set }
+const loadIdx = (url) => fetch(url, { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+export const staticAudioReady = Promise.all([loadIdx('audio/words/index.json'), loadIdx('audio/s/index.json')])
+  .then(([w, s]) => {
+    if (!w && !s) return;
+    staticIdx = {
+      voice: (w || s).voice,
+      words: new Set(w && w.voice === (w || s).voice ? w.words : []),
+      ids: new Set(s && s.voice === (w || s).voice ? s.ids : []),
+    };
+  });
+export function staticAudioInfo() {
+  return staticIdx ? { voice: staticIdx.voice, words: staticIdx.words.size, sentences: staticIdx.ids.size } : null;
+}
+
+/** 文本指纹：FNV-1a 64 位（UTF-8），与 tools/gen_audio.py 的 text_id() 一致 */
+export function textId(text) {
+  let h = 0xcbf29ce484222325n;
+  for (const b of new TextEncoder().encode(text)) { h ^= BigInt(b); h = (h * 0x100000001b3n) & 0xffffffffffffffffn; }
+  return h.toString(16).padStart(16, '0');
+}
 
 /** 这段文本有预生成的文件、且音色与当前设置一致（或没在用 MiMo）时，返回文件地址 */
 function staticUrl(text) {
-  if (!staticIdx || !staticIdx.set.has(text)) return null;
+  if (!staticIdx) return null;
   const s = get().settings;
+  if (s.ttsProvider === 'system') return null;
   const cfg = mimoConfig();
   if (cfg && cfg.voice !== staticIdx.voice) return null; // 用户换了别的音色，就按新音色实时生成
-  if (s.ttsProvider === 'system') return null;
-  return `audio/words/${text.toLowerCase().replace(/[^a-z0-9-]/g, '_')}.mp3`;
+  const t = text.trim();
+  if (staticIdx.words.has(t)) return `audio/words/${t.toLowerCase().replace(/[^a-z0-9-]/g, '_')}.mp3`;
+  const id = textId(t);
+  return staticIdx.ids.has(id) ? `audio/s/${id}.mp3` : null;
 }
 
 function mimoConfig() {
@@ -64,7 +84,7 @@ if ('speechSynthesis' in window) {
   speechSynthesis.onvoiceschanged = refreshVoices;
 }
 export function englishVoices() { return voicesCache.filter(v => v.lang.toLowerCase().startsWith('en')); }
-export function ttsAvailable() { return ttsEngine() !== 'none'; }
+export function ttsAvailable() { return ttsEngine() !== 'none' || !!staticIdx; }
 
 function pickVoice() {
   const saved = get().settings.voiceURI;

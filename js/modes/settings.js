@@ -99,7 +99,8 @@ export function renderSettings(root) {
   const cacheInfo = h('small', {}, 'Counting…');
   Promise.all([ttsCacheCount(), staticAudioReady]).then(([n]) => {
     const st = staticAudioInfo();
-    cacheInfo.textContent = (st ? `${st.count} word clips built in (${st.voice}) · ` : '') + `${n ?? 0} clips cached — replays don't call the API`;
+    cacheInfo.textContent = (st ? `Built in (${st.voice}, no key needed): ${st.words} words, ${st.sentences} sentences · ` : '')
+      + `${n ?? 0} extra clips cached`;
   });
 
   const mimoOn = (s.settings.ttsProvider || 'mimo') === 'mimo';
@@ -113,7 +114,7 @@ export function renderSettings(root) {
       h('div', { class: 'row-top' },
         h('span', { class: 'r-ico c-amber' }, icon('sparkle', 20)),
         h('div', { class: 'r-label' }, 'MiMo API Key',
-          h('small', {}, 'Stored only on this device, never included in backups')),
+          h('small', {}, 'Only needed for content that isn\'t built in, or for a different voice. Stored only on this device')),
         testPill, testBtn),
       keyInput) : null,
     mimoOn ? h('div', { class: 'row' },

@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v14'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v15'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 const ASSETS = [
   './',
   './index.html',
@@ -36,13 +36,13 @@ self.addEventListener('activate', e => {
       .then(() => self.clients.claim()));
 });
 
-// 单词发音文件：放进单独的缓存，升级网站版本时不会被清掉（约 15 MB，不必重复下载）
+// 预生成的发音文件（单词 + 句子）：放进单独的缓存，升级网站版本时不会被清掉（约 15 MB，不必重复下载）
 const AUDIO_CACHE = 'wallboard-audio-v1';
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.origin === self.location.origin && url.pathname.includes('/audio/words/')) {
+  if (url.origin === self.location.origin && (url.pathname.includes('/audio/words/') || url.pathname.includes('/audio/s/'))) {
     // 索引文件：优先网络（重新生成后能及时更新），断网时用缓存
     if (url.pathname.endsWith('/index.json')) {
       e.respondWith(fetch(e.request).then(res => {
