@@ -53,7 +53,7 @@ export function renderWord(root) {
     h('div', {}, h('h1', {}, icon('book', 24), 'IELTS Words'), sub),
     h('a', { class: 'wm-status', href: '#standby', title: 'Back to Today' },
       h('span', { class: 'chip' }, icon('timer', 14), clockEl),
-      h('span', { class: 'chip amber' }, icon('flame', 14), `${displayStreak()}-day streak`),
+      h('span', { class: 'chip amber' }, icon('flame', 14), `Streak ${displayStreak()}`),
       h('span', { class: 'chip' }, `${minutesToday()} min today`)));
 
   const body = h('div', { class: 'wm-body' });
