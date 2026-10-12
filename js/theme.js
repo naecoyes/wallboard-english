@@ -3,7 +3,7 @@
 import { get } from './store.js';
 
 const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-const META = { light: '#eef5f1', dark: '#07080d' };
+const META = { light: '#f4f3ed', dark: '#0f1513' };
 
 /** 现在应该用哪种主题 */
 export function currentTheme(now = new Date()) {

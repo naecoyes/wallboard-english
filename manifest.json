@@ -1,14 +1,14 @@
 {
-  "name": "墙板英语 · WallBoard English",
-  "short_name": "墙板英语",
-  "description": "挂墙常驻的英语学习督促板",
+  "name": "EchoEnglish · 每日英语教练",
+  "short_name": "EchoEnglish",
+  "description": "挂墙常驻的每日英语教练：短语、雅思单词、间隔复习、打卡",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
-  "background_color": "#07080d",
-  "theme_color": "#07080d",
+  "background_color": "#f4f3ed",
+  "theme_color": "#236b52",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
