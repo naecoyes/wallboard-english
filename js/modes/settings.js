@@ -4,7 +4,7 @@ import { icon } from '../icons.js';
 import { get, update, exportJSON, importJSON } from '../store.js';
 import {
   englishVoices, speak, ttsAvailable, ttsEngine, testMimo, MIMO_VOICES,
-  localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady,
+  localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady, staticAudioReady, staticAudioInfo,
 } from '../tts.js';
 import { wakeLockSupported, wakeLockActive, requestWakeLock } from '../wakelock.js';
 import { applyTheme, currentTheme, currentPalette, PALETTES } from '../theme.js';
@@ -97,7 +97,10 @@ export function renderSettings(root) {
   });
 
   const cacheInfo = h('small', {}, 'Counting…');
-  ttsCacheCount().then(n => { cacheInfo.textContent = `${n ?? 0} clips cached — replays don't call the API`; });
+  Promise.all([ttsCacheCount(), staticAudioReady]).then(([n]) => {
+    const st = staticAudioInfo();
+    cacheInfo.textContent = (st ? `${st.count} word clips built in (${st.voice}) · ` : '') + `${n ?? 0} clips cached — replays don't call the API`;
+  });
 
   const mimoOn = (s.settings.ttsProvider || 'mimo') === 'mimo';
   const voiceGroup = group('Voice',
@@ -164,6 +167,13 @@ export function renderSettings(root) {
   };
   const idleSelect = pick('idleMin', [[1, '1 min'], [2, '2 min'], [3, '3 min'], [5, '5 min'], [10, '10 min']], 'Idle time');
   const autoSelect = pick('wordAutoSec', [[0, 'Off'], [30, 'Every 30 s'], [45, 'Every 45 s'], [60, 'Every 1 min'], [120, 'Every 2 min']], 'Auto-advance');
+  const autoPlaySel = h('select', {},
+    ...[['on', 'On'], ['off', 'Off']].map(([v, t]) =>
+      h('option', { value: v, ...((s.settings.wordAutoPlay !== false ? 'on' : 'off') === v ? { selected: '' } : {}) }, t)));
+  autoPlaySel.addEventListener('change', () => {
+    update(st => { st.settings.wordAutoPlay = autoPlaySel.value === 'on'; });
+    toast('Read-aloud saved');
+  });
   const wst = s.words;
 
   // ---------- 显示：白天 / 夜间 ----------
@@ -223,6 +233,7 @@ export function renderSettings(root) {
     row('book', 'c-indigo', 'Show words when idle', 'Switch to Words after this long without a tap (never during Focus)', idleSelect),
     row('repeat', 'c-sky', 'Word auto-advance',
       `${wst.known.length} known · ${wst.unknown.length} learning (in your review deck)`, autoSelect),
+    row('volume', 'c-green', 'Read new words aloud', 'Each word is spoken when it appears, including auto-advance', autoPlaySel),
     row('sun', 'c-amber', 'Keep screen on',
       wakeLockSupported() ? 'Tap the page once to activate'
         : !window.isSecureContext

@@ -6,7 +6,7 @@ import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
 import { displayStreak, minutesToday } from '../streak.js';
-import { speak, stopSpeak, ttsAvailable, prefetch, prefetchMode } from '../tts.js';
+import { speak, stopSpeak, ttsAvailable, prefetch, prefetchMode, staticAudioReady } from '../tts.js';
 
 let WORDS = null;
 const say = (text) => ttsAvailable() ? speak(text) : toast('No English voice available');
@@ -186,6 +186,14 @@ export function renderWord(root) {
     curExamples = w.ex.map(e => e[0]);
     const nxt = findIndex(cur + 1);
     prefetch([w.w, nxt >= 0 ? WORDS[nxt].w : null, ...(prefetchMode() === 'all' ? curExamples : [])], { replace: true });
+
+    // 切换到新词时自动读一遍（设置里可关闭）；熄屏 / 切后台时不读
+    if (get().settings.wordAutoPlay !== false) {
+      const shown = cur;
+      staticAudioReady.then(() => setTimeout(() => {
+        if (alive && shown === cur && !document.hidden) speak(w.w, { auto: true });
+      }, 400));
+    }
 
     // 单词按卡片宽度自动缩字号，长词也不会从中间断开
     const wordEl = hero.querySelector('.wm-word');

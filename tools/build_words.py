@@ -26,6 +26,7 @@ DATA = os.environ.get('DATA_DIR') or os.path.join(ROOT, 'tools', '.cache')
 OUT = os.path.join(ROOT, 'js', 'words.js')
 CURATED = os.path.join(ROOT, 'tools', 'curated.json')
 MAX_EX = 3
+EASY_COLLINS = 4  # 柯林斯星级 ≥ 此值视为简单词，不收录
 
 SOURCES = {
     'ecdict.csv': 'https://raw.githubusercontent.com/skywind3000/ECDICT/master/ecdict.csv',
@@ -139,7 +140,16 @@ def main():
             return False
         if re.search(r'(^|/)0:', r['exchange'] or ''):  # 本身是别的词的变形（复数、过去式…）
             return False
+        if too_easy(r):
+            return False
         return True
+
+    def too_easy(r):
+        """柯林斯 4–5 星 = 最常用的日常词（system、million、power…），对备考雅思意义不大，去掉"""
+        try:
+            return int(r.get('collins') or 0) >= EASY_COLLINS
+        except ValueError:
+            return False
 
     # ---------- Tatoeba 中英句对 ----------
     print('读取 Tatoeba …')
@@ -229,6 +239,8 @@ def main():
     for c in curated:
         w = c['w']
         r = ecdict.get(w, {})
+        if r and too_easy(r):
+            continue
         forms = parse_forms(r.get('exchange'))
         own = [[c['ex'][0], c['ex'][1], 0, 0], [c['ex2'][0], c['ex2'][1], 0, 0]]
         extra = examples(w, forms, exclude=[x[0] for x in own])[:MAX_EX - len(own)]

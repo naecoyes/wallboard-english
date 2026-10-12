@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v13'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v14'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 const ASSETS = [
   './',
   './index.html',
@@ -32,12 +32,30 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== AUDIO_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim()));
 });
 
+// 单词发音文件：放进单独的缓存，升级网站版本时不会被清掉（约 15 MB，不必重复下载）
+const AUDIO_CACHE = 'wallboard-audio-v1';
+
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  if (url.origin === self.location.origin && url.pathname.includes('/audio/words/')) {
+    // 索引文件：优先网络（重新生成后能及时更新），断网时用缓存
+    if (url.pathname.endsWith('/index.json')) {
+      e.respondWith(fetch(e.request).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(AUDIO_CACHE).then(c => c.put(url.pathname, copy)); }
+        return res;
+      }).catch(() => caches.match(url.pathname, { cacheName: AUDIO_CACHE })));
+      return;
+    }
+    // mp3：缓存优先
+    e.respondWith(caches.open(AUDIO_CACHE).then(c => c.match(e.request).then(hit => hit ||
+      fetch(e.request).then(res => { if (res.ok) c.put(e.request, res.clone()); return res; }))));
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(hit => hit ||
       fetch(e.request).then(res => {

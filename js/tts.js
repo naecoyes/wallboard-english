@@ -25,6 +25,24 @@ export const ttsConfigReady = import('./config.local.js')
   .catch(() => {});
 export function localKeyPresent() { return !!localKey; }
 
+// ---------- 预生成的单词发音（audio/words，随网站发布，由 tools/gen_audio.py 生成） ----------
+let staticIdx = null; // { voice, set }
+export const staticAudioReady = fetch('audio/words/index.json', { cache: 'no-cache' })
+  .then(r => (r.ok ? r.json() : null))
+  .then(d => { if (d && Array.isArray(d.words)) staticIdx = { voice: d.voice, set: new Set(d.words) }; })
+  .catch(() => {});
+export function staticAudioInfo() { return staticIdx ? { voice: staticIdx.voice, count: staticIdx.set.size } : null; }
+
+/** 这段文本有预生成的文件、且音色与当前设置一致（或没在用 MiMo）时，返回文件地址 */
+function staticUrl(text) {
+  if (!staticIdx || !staticIdx.set.has(text)) return null;
+  const s = get().settings;
+  const cfg = mimoConfig();
+  if (cfg && cfg.voice !== staticIdx.voice) return null; // 用户换了别的音色，就按新音色实时生成
+  if (s.ttsProvider === 'system') return null;
+  return `audio/words/${text.toLowerCase().replace(/[^a-z0-9-]/g, '_')}.mp3`;
+}
+
 function mimoConfig() {
   const s = get().settings;
   const key = (s.mimoKey || '').trim() || localKey;
@@ -94,7 +112,7 @@ document.addEventListener('pointerdown', () => {
   audio.play().catch(() => {});
 }, { once: true, capture: true });
 
-function playBlob(blob, rate) {
+function playBlob(blob, rate, quiet = false) {
   return new Promise(resolve => {
     if (currentUrl) URL.revokeObjectURL(currentUrl);
     currentUrl = URL.createObjectURL(blob);
@@ -106,7 +124,7 @@ function playBlob(blob, rate) {
     audio.preservesPitch = true;
     audio.play().catch(err => {
       finishCurrent = null;
-      if (err && err.name === 'NotAllowedError') toast('Autoplay was blocked. Tap the screen and try again.');
+      if (!quiet && err && err.name === 'NotAllowedError') toast('Autoplay was blocked. Tap the screen and try again.');
       resolve(false);
     });
   });
@@ -185,6 +203,18 @@ const inflight = new Map(); // key -> Promise<Blob>
 
 /** 已缓存（内存或 IndexedDB）则直接返回，否则请求一次；同一段文本同时只会有一个请求 */
 async function getBlob(text, cfg) {
+  const url = staticUrl(text);
+  if (url) {
+    // 静态文件：浏览器 / Service Worker 会缓存，离线也能播放
+    if (mem.has(url)) return mem.get(url);
+    if (inflight.has(url)) return inflight.get(url);
+    const p = fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.blob(); })
+      .then(blob => { remember(url, blob); return blob; })
+      .finally(() => inflight.delete(url));
+    inflight.set(url, p);
+    return p;
+  }
+  if (!cfg) throw new Error('no MiMo config');
   const key = keyFor(text, cfg);
   const hit = mem.get(key) || await cacheGet(key);
   if (hit) { remember(key, hit); return hit; }
@@ -210,8 +240,11 @@ export function prefetchMode() { return get().settings.ttsPrefetch || 'smart'; }
  */
 export function prefetch(texts, { replace = false } = {}) {
   const cfg = mimoConfig();
-  if (!cfg || prefetchMode() === 'off' || Date.now() < prefetchPaused) return;
-  const list = [...new Set(texts.filter(t => t && t.trim()))];
+  if (prefetchMode() === 'off') return;
+  const apiOk = cfg && Date.now() >= prefetchPaused;
+  // 有静态文件的直接预取文件（不耗额度）；其余需要 MiMo 可用
+  const list = [...new Set(texts.filter(t => t && t.trim() && (staticUrl(t) || apiOk)))];
+  if (!list.length) return;
   if (replace) queue = [];
   for (const t of list) if (!queue.includes(t)) queue.push(t);
   pump();
@@ -224,8 +257,8 @@ async function pump() {
     while (queue.length) {
       if (document.hidden) { queue = []; break; } // 熄屏 / 切后台时不在后台消耗额度
       const cfg = mimoConfig();
-      if (!cfg) { queue = []; break; }
       const text = queue.shift();
+      if (!cfg && !staticUrl(text)) continue;
       try {
         await getBlob(text, cfg);
       } catch (e) {
@@ -263,25 +296,27 @@ function warn(e) {
 
 let seq = 0;
 /** 朗读英文文本，返回 Promise（播完或失败时 resolve） */
-export async function speak(text, { rate } = {}) {
+export async function speak(text, { rate, auto = false } = {}) {
   stopSpeak();
   const my = ++seq;
   const r = rate ?? get().settings.rate ?? 0.95;
   const cfg = mimoConfig();
-  if (cfg) {
+  const url = staticUrl(text);
+  if (url || cfg) {
     try {
-      const key = keyFor(text, cfg);
-      if (!mem.has(key)) setLoading(true); // 已预生成好的不会闪提示
+      const ready = url ? mem.has(url) : mem.has(keyFor(text, cfg));
+      if (!ready && !auto && !url) setLoading(true); // 已预生成 / 静态文件不显示提示
       const blob = await getBlob(text, cfg);
       if (my !== seq) return false; // 期间又点了别的
       setLoading(false);
-      return await playBlob(blob, r);
+      return await playBlob(blob, r, auto);
     } catch (e) {
       if (my !== seq) return false;
       setLoading(false);
-      warn(e);
+      if (!auto) warn(e);
     }
   }
+  if (auto) return false; // 自动朗读失败时不退回系统语音（避免无人时反复出声 / 报错）
   return speakSystem(text, r);
 }
 

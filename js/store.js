@@ -10,6 +10,7 @@ const defaults = () => ({
     dailyGoalMin: 25, voiceURI: null, rate: 0.95, lastBackupHint: null,
     idleMin: 2,        // 无操作多少分钟后自动进入单词模式
     wordAutoSec: 45,   // 单词模式自动切换间隔（0 = 不自动切换）
+    wordAutoPlay: true, // 切换到新词时自动朗读
     theme: 'auto',     // auto 按时间段 / system 跟随系统 / light 白天 / dark 夜间
     palette: 'forest', // 配色主题，见 theme.js PALETTES
     dayStart: 7,       // 白天模式开始（时）
