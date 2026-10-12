@@ -10,11 +10,11 @@ import { toast } from './ui.js';
 export const MIMO_MODEL = 'mimo-v2.5-tts';
 export const MIMO_DEFAULT_ENDPOINT = 'https://api.xiaomimimo.com/v1/chat/completions';
 export const MIMO_VOICES = [
-  ['Mia', 'Mia · 英文女声'],
-  ['Chloe', 'Chloe · 英文女声'],
-  ['Milo', 'Milo · 英文男声'],
-  ['Dean', 'Dean · 英文男声'],
-  ['mimo_default', 'MiMo 默认'],
+  ['Mia', 'Mia · female'],
+  ['Chloe', 'Chloe · female'],
+  ['Milo', 'Milo · male'],
+  ['Dean', 'Dean · male'],
+  ['mimo_default', 'MiMo default'],
 ];
 
 // ---------- 本地配置（可选）：js/config.local.js 里放 API Key，免得在平板上手输 ----------
@@ -106,7 +106,7 @@ function playBlob(blob, rate) {
     audio.preservesPitch = true;
     audio.play().catch(err => {
       finishCurrent = null;
-      if (err && err.name === 'NotAllowedError') toast('浏览器拦截了自动播放，点一下屏幕再试');
+      if (err && err.name === 'NotAllowedError') toast('Autoplay was blocked. Tap the screen and try again.');
       resolve(false);
     });
   });
@@ -162,7 +162,7 @@ async function fetchMimo(text, cfg) {
       throw new Error(`HTTP ${r.status}${msg ? ' · ' + msg : ''}`);
     }
     const b64 = (await r.json()).choices?.[0]?.message?.audio?.data;
-    if (!b64) throw new Error('接口没有返回音频');
+    if (!b64) throw new Error('No audio returned');
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -178,7 +178,7 @@ function setLoading(on) {
   if (on && !loadingEl) {
     loadingEl = document.createElement('div');
     loadingEl.className = 'tts-loading';
-    loadingEl.innerHTML = '<span class="spin"></span>MiMo 生成发音…';
+    loadingEl.innerHTML = '<span class="spin"></span>Generating audio…';
     document.body.append(loadingEl);
   } else if (!on && loadingEl) {
     loadingEl.remove();
@@ -190,7 +190,7 @@ let lastWarn = 0;
 function warn(e) {
   if (Date.now() - lastWarn < 60000) return;
   lastWarn = Date.now();
-  toast(`MiMo 发音失败，已改用系统语音（${e.message}）`);
+  toast(`MiMo audio failed — using system voice (${e.message})`);
 }
 
 let seq = 0;
@@ -217,7 +217,7 @@ export async function speak(text, { rate } = {}) {
     } catch (e) {
       if (my !== seq) return false; // 被 stopSpeak / 新的朗读打断，不算失败
       setLoading(false);
-      warn(e.name === 'AbortError' ? new Error('请求超时') : e);
+      warn(e.name === 'AbortError' ? new Error('request timed out') : e);
     }
   }
   return speakSystem(text, r);
@@ -235,7 +235,7 @@ export function stopSpeak() {
 /** 设置页「测试连接」：直接请求一次，返回 {ok, ms, error} */
 export async function testMimo(text = 'Practice a little every day, and you will improve.') {
   const cfg = mimoConfig();
-  if (!cfg) return { ok: false, error: '未填写 API Key 或已选择系统语音' };
+  if (!cfg) return { ok: false, error: 'No API key, or system voice is selected' };
   const t0 = performance.now();
   try {
     const blob = await fetchMimo(text, cfg);

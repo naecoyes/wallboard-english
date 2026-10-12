@@ -1,7 +1,7 @@
 {
-  "name": "EchoEnglish · 每日英语教练",
+  "name": "EchoEnglish · Your Daily English Coach",
   "short_name": "EchoEnglish",
-  "description": "挂墙常驻的每日英语教练：短语、雅思单词、间隔复习、打卡",
+  "description": "A wall-mounted daily English coach: phrases, IELTS words, spaced review and streaks.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

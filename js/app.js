@@ -70,7 +70,7 @@ initWakeLock();
 
 // Service Worker（离线缓存；file:// 下自动跳过）
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW 注册失败', e));
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW registration failed', e));
 }
 
 if (!location.hash) location.hash = '#standby';

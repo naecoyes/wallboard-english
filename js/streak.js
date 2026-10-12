@@ -71,7 +71,7 @@ export function last7Days() {
     const mins = get().sessions
       .filter(s => studyDay(new Date(s.date)) === ds)
       .reduce((sum, s) => sum + (s.minutes || 0), 0);
-    out.push({ day: ds, dow: '日一二三四五六'[d.getDay()], minutes: mins });
+    out.push({ day: ds, dow: 'SMTWTFS'[d.getDay()], minutes: mins });
   }
   return out;
 }

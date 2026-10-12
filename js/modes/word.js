@@ -9,9 +9,11 @@ import { displayStreak, minutesToday } from '../streak.js';
 import { speak, stopSpeak, ttsAvailable } from '../tts.js';
 
 let WORDS = null;
-const say = (text) => ttsAvailable() ? speak(text) : toast('当前无可用英文语音');
+const say = (text) => ttsAvailable() ? speak(text) : toast('No English voice available');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const TAG_NAME = { ielts: '雅思', cet4: '四级', cet6: '六级', ky: '考研', toefl: '托福', gre: 'GRE' };
+const TAG_NAME = { ielts: 'IELTS', cet4: 'CET-4', cet6: 'CET-6', ky: 'Kaoyan', toefl: 'TOEFL', gre: 'GRE' };
+// 词库里的词形标签是中文（来自构建脚本），界面上显示英文
+const FORM_EN = { '过去式': 'past', '过去分词': 'past participle', '现在分词': '-ing', '三单': '3rd person', '复数': 'plural', '比较级': 'comparative', '最高级': 'superlative' };
 
 /** 把例句中的目标词及其变形（过去式、复数等）高亮 */
 function highlight(text, w) {
@@ -45,14 +47,14 @@ export function renderWord(root) {
   let alive = true;
 
   // ---------- 头部：进度 + 迷你状态 ----------
-  const sub = h('div', { class: 'sub' }, '正在加载雅思词库…');
+  const sub = h('div', { class: 'sub' }, 'Loading IELTS word list…');
   const clockEl = h('span', {});
   const head = h('div', { class: 'mode-head' },
-    h('div', {}, h('h1', {}, icon('book', 24), '雅思单词'), sub),
-    h('a', { class: 'wm-status', href: '#standby', title: '回到待机屏' },
+    h('div', {}, h('h1', {}, icon('book', 24), 'IELTS Words'), sub),
+    h('a', { class: 'wm-status', href: '#standby', title: 'Back to Today' },
       h('span', { class: 'chip' }, icon('timer', 14), clockEl),
-      h('span', { class: 'chip amber' }, icon('flame', 14), `连续 ${displayStreak()} 天`),
-      h('span', { class: 'chip' }, `今日 ${minutesToday()} 分钟`)));
+      h('span', { class: 'chip amber' }, icon('flame', 14), `${displayStreak()}-day streak`),
+      h('span', { class: 'chip' }, `${minutesToday()} min today`)));
 
   const body = h('div', { class: 'wm-body' });
   const barFill = h('i', {});
@@ -62,8 +64,8 @@ export function renderWord(root) {
   function updateSub() {
     const w = get().words;
     sub.textContent = cur < 0
-      ? `共 ${WORDS.length} 个单词，已全部标记掌握`
-      : `第 ${cur + 1} / ${WORDS.length} 个 · 已掌握 ${w.known.length} · 不认识 ${w.unknown.length}`;
+      ? `All ${WORDS.length} words marked as known`
+      : `Word ${cur + 1} of ${WORDS.length} · known ${w.known.length} · learning ${w.unknown.length}`;
   }
 
   function next() {
@@ -82,15 +84,15 @@ export function renderWord(root) {
 
     if (cur < 0) {
       body.append(h('div', { class: 'task-card glass', style: 'grid-column:1/-1;text-align:center' },
-        h('div', { class: 'prompt' }, '全部单词都已标记为「太简单」'),
-        h('p', { class: 'task-sub' }, '可以重置进度重新过一遍'),
+        h('div', { class: 'prompt' }, 'You marked every word as too easy'),
+        h('p', { class: 'task-sub' }, 'Reset your progress to go through the list again.'),
         h('div', { class: 'btn-row', style: 'justify-content:center' },
           h('button', {
             class: 'btn primary', onclick: () => {
               update(s => { s.words = { idx: 0, known: [], unknown: [] }; });
               cur = 0; paint();
             },
-          }, icon('undo', 18), '重置单词进度'))));
+          }, icon('undo', 18), 'Reset word progress'))));
       return;
     }
 
@@ -101,33 +103,33 @@ export function renderWord(root) {
     // ---------- 左：单词卡 ----------
     const unknownBtn = h('button', {
       class: 'wm-pill' + (isUnknown ? ' on' : ''), onclick: () => {
-        if (get().words.unknown.includes(w.w)) return toast('已在复习卡组中');
+        if (get().words.unknown.includes(w.w)) return toast('Already in your review deck');
         update(s => { s.words.unknown.push(w.w); });
         const added = addCard(w.w, meaning, w.ex[0] ? w.ex[0][0] : '');
         unknownBtn.classList.add('on');
-        toast(added ? '已加入复习卡组' : '已在复习卡组中');
+        toast(added ? 'Added to your review deck' : 'Already in your review deck');
         updateSub();
       },
-    }, icon('undo', 16), '不认识');
+    }, icon('undo', 16), "Don't know");
     const easyBtn = h('button', {
       class: 'wm-pill', onclick: () => {
         update(s => {
           if (!s.words.known.includes(w.w)) s.words.known.push(w.w);
           s.words.unknown = s.words.unknown.filter(x => x !== w.w);
         });
-        toast('已标记掌握，之后不再出现');
+        toast("Marked as known — it won't show again");
         next();
       },
-    }, icon('check', 16), '太简单');
+    }, icon('check', 16), 'Too easy');
 
     const tagRow = h('div', { class: 'wm-tags' },
       ...(w.tags || []).map(t => h('span', { class: 'wm-tag' + (t === 'ielts' ? ' main' : '') }, TAG_NAME[t] || t)),
-      w.collins ? h('span', { class: 'wm-stars', title: `柯林斯 ${w.collins} 星` }, '★'.repeat(w.collins) + '☆'.repeat(5 - w.collins)) : null);
+      w.collins ? h('span', { class: 'wm-stars', title: `Collins ${w.collins}-star` }, '★'.repeat(w.collins) + '☆'.repeat(5 - w.collins)) : null);
 
     const hero = h('section', { class: 'wm-hero glass' },
       h('div', { class: 'wm-top' },
         h('div', { class: 'wm-word', style: 'font-size:5.25rem' }, w.w),
-        h('button', { class: 'wm-speak', 'aria-label': '读单词', onclick: () => say(w.w) }, icon('volume', 30))),
+        h('button', { class: 'wm-speak', 'aria-label': 'Say the word', onclick: () => say(w.w) }, icon('volume', 30))),
       h('div', { class: 'wm-ipa-row' },
         h('span', { class: 'wm-ipa' }, w.ipa),
         h('div', { class: 'wm-pills' }, unknownBtn, h('span', { class: 'wm-sep' }), easyBtn)),
@@ -137,7 +139,7 @@ export function renderWord(root) {
           pos ? h('span', { class: 'wm-pos' }, pos) : null, h('span', { class: 'wm-zh' }, zh)))),
       h('div', { class: 'wm-spacer' }),
       h('button', { class: 'wm-next', onclick: next },
-        '下一个', icon('arrowRight', 22),
+        'Next', icon('arrowRight', 22),
         autoSec ? h('span', { class: 'wm-auto' }, barFill) : null));
 
     // ---------- 左下：单词笔记（词形 / 辨析 / 搭配），放在单词卡空白处，挂墙时不用滚动 ----------
@@ -145,9 +147,9 @@ export function renderWord(root) {
     if (w.forms?.length) {
       // 相同拼写合并标签，如「过去式/过去分词 accommodated」
       const merged = new Map();
-      for (const [label, f] of w.forms) merged.set(f, merged.has(f) ? `${merged.get(f)}/${label}` : label);
+      for (const [zh, f] of w.forms) { const label = FORM_EN[zh] || zh; merged.set(f, merged.has(f) ? `${merged.get(f)} / ${label}` : label); }
       groups.push(h('div', { class: 'wm-note-group' },
-        h('span', { class: 'chip' }, '词形'),
+        h('span', { class: 'chip' }, 'Forms'),
         h('div', { class: 'wm-forms' }, ...[...merged].map(([f, label]) => h('span', {}, h('small', {}, label), f)))));
     }
     if (groups.length) {
@@ -158,22 +160,22 @@ export function renderWord(root) {
 
     // ---------- 右：例句 ----------
     const exCard = h('section', { class: 'wm-card glass' },
-      h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, `例句 · ${w.ex.length}`)),
+      h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, `EXAMPLES · ${w.ex.length}`)),
       ...w.ex.map(([en, zh, eid], i) => h('div', { class: 'wm-ex' + (i === 0 ? ' first' : '') },
         h('div', { class: 'wm-ex-main' },
           h('div', { class: 'wm-en' }, highlight(en, w)),
           h('div', { class: 'wm-cn' }, zh),
-          h('div', { class: 'wm-src' }, eid ? `来源：Tatoeba #${eid} · CC BY 2.0 FR` : '来源：本站原创')),
-        h('button', { class: 'icon-btn sm', 'aria-label': '朗读例句', onclick: () => say(en) }, icon('volume', 18)))));
+          h('div', { class: 'wm-src' }, eid ? `Source: Tatoeba #${eid} · CC BY 2.0 FR` : 'Source: original')),
+        h('button', { class: 'icon-btn sm', 'aria-label': 'Read example', onclick: () => say(en) }, icon('volume', 18)))));
 
     // ---------- 右：单词笔记（辨析 / 搭配，仅原创词条有） ----------
     const noteGroups = [];
     if (w.notes?.length) noteGroups.push(h('div', { class: 'wm-note-group' },
-      h('span', { class: 'chip' }, '辨析'), h('ul', {}, ...w.notes.map(n => h('li', {}, n)))));
+      h('span', { class: 'chip' }, 'Compare'), h('ul', {}, ...w.notes.map(n => h('li', {}, n)))));
     if (w.col?.length) noteGroups.push(h('div', { class: 'wm-note-group' },
-      h('span', { class: 'chip green' }, '搭配'), h('ul', {}, ...w.col.map(n => h('li', {}, n)))));
+      h('span', { class: 'chip green' }, 'Collocations'), h('ul', {}, ...w.col.map(n => h('li', {}, n)))));
     const notesCard = noteGroups.length
-      ? h('section', { class: 'wm-card glass' }, h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, '单词笔记')), ...noteGroups)
+      ? h('section', { class: 'wm-card glass' }, h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'NOTES')), ...noteGroups)
       : null;
 
     body.append(hero, h('div', { class: 'wm-side' }, exCard, notesCard));
@@ -221,7 +223,7 @@ export function renderWord(root) {
   if (WORDS) start();
   else import('../words.js')
     .then(m => { WORDS = m.WORDS; start(); })
-    .catch(e => { sub.textContent = '词库加载失败：' + e.message; });
+    .catch(e => { sub.textContent = 'Could not load the word list: ' + e.message; });
 
   return () => { alive = false; clearInterval(iv); stopSpeak(); document.removeEventListener('keydown', onKey); };
 }

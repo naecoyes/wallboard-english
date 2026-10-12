@@ -10,7 +10,7 @@ export async function requestWakeLock() {
     sentinel.addEventListener('release', () => { sentinel = null; });
     return true;
   } catch (e) {
-    console.warn('Wake Lock 申请失败', e);
+    console.warn('Wake Lock request failed', e);
     return false;
   }
 }

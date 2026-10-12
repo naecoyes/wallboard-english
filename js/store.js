@@ -30,7 +30,7 @@ function load() {
     if (!raw) return defaults();
     return migrate(JSON.parse(raw));
   } catch (e) {
-    console.warn('读取本地数据失败，使用初始数据', e);
+    console.warn('Could not read saved data, starting fresh', e);
     return defaults();
   }
 }
@@ -50,7 +50,7 @@ export function get() { return state; }
 
 export function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
-  catch (e) { console.warn('保存失败', e); }
+  catch (e) { console.warn('Save failed', e); }
 }
 
 export function update(fn) { fn(state); save(); }
@@ -83,7 +83,7 @@ export function exportJSON() {
 export function importJSON(text) {
   try {
     const data = JSON.parse(text);
-    if (typeof data !== 'object' || data === null) throw new Error('不是有效的数据对象');
+    if (typeof data !== 'object' || data === null) throw new Error('Not a valid backup object');
     const keepKey = state.settings.mimoKey;
     state = migrate(data);
     if (!state.settings.mimoKey) state.settings.mimoKey = keepKey; // 备份里没有 Key 时保留本机的
