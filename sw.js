@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v19'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v20'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './js/app.js',
   './js/store.js',
   './js/streak.js',
+  './js/study-timer.js',
   './js/srs.js',
   './js/tts.js',
   './js/ui.js',

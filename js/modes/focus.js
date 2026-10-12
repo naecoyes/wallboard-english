@@ -1,8 +1,9 @@
+import { studySeconds, formatStudyTime, pauseStudyTimer, finishStudyResult } from '../study-timer.js';
 // focus.js — 专注模式：25 分钟主线任务向导
 // 流程：听力理解 → 逐句跟读 → 表达积累 → 口语输出 → 记录结果
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
-import { addXP, logSession } from '../store.js';
+import { addXP } from '../store.js';
 import { addCard } from '../srs.js';
 import { checkIn, studyDay } from '../streak.js';
 import { PASSAGES } from '../content.js';
@@ -27,7 +28,7 @@ export function renderFocus(root) {
   let timerOn = false;
   let done = false;
   let added = 0;
-  const startedAt = Date.now();
+  let manualPause = false;
 
   // ---------- 横屏：左侧栏（计时 + 竖向步骤条）+ 右侧内容；竖屏由 CSS 改为上下排列 ----------
   const stepper = h('div', { class: 'stepper glass' });
@@ -37,6 +38,12 @@ export function renderFocus(root) {
     h('div', { class: 'timer-row' }, icon('timer', 16), 'FOCUS TIMER'),
     timerEl,
     h('div', { class: 'timer-bar' }, barFill));
+  const pauseButton = h('button', { class: 'btn sm', onclick: () => {
+    manualPause = !manualPause;
+    pauseStudyTimer(manualPause);
+    pauseButton.textContent = manualPause ? 'Resume' : 'Pause';
+  } }, 'Pause');
+  timerPill.append(pauseButton);
   const sideNote = h('div', { class: 'side-note glass' }, "Today's passage", h('b', {}, passage.title));
   const body = h('div', { class: 'focus-main' });
 
@@ -56,11 +63,12 @@ export function renderFocus(root) {
 
   const iv = setInterval(() => {
     if (!timerOn || done) return;
-    remaining = Math.max(0, remaining - 1);
+    remaining = Math.max(0, TOTAL_SEC - Math.floor(studySeconds()));
     timerEl.textContent = fmt(remaining);
     barFill.style.width = `${((TOTAL_SEC - remaining) / TOTAL_SEC) * 100}%`;
     if (remaining === 0) {
       timerOn = false;
+      pauseStudyTimer(true);
       timerPill.classList.add('over');
       timerEl.textContent = "Time's up";
       toast("25 minutes done — time to wrap up");
@@ -167,10 +175,12 @@ export function renderFocus(root) {
 
     if (step === 4) { // 记录结果
       timerOn = false;
-      const minutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+      pauseStudyTimer(true);
+      pauseButton.disabled = true;
+      const duration = formatStudyTime(studySeconds());
       const pick = (val) => {
         if (done) return; done = true;
-        logSession('focus', minutes, val);
+        finishStudyResult(val);
         const { streak } = checkIn();
         addXP(30);
         toast(`+30 XP · ${streak}-day streak`);
@@ -179,7 +189,7 @@ export function renderFocus(root) {
       body.append(card('green', 'flag', 'Step 5 · Wrap-up',
         'How did it go? Picking one checks you in for today.',
         h('div', { class: 'summary' },
-          h('span', { class: 'chip' }, icon('timer', 14), `About ${minutes} min`),
+          h('span', { class: 'chip' }, icon('timer', 14), `${duration} active`),
           h('span', { class: 'chip' }, icon('book', 14), passage.title),
           h('span', { class: 'chip' }, icon('cards', 14), `${added} new card${added === 1 ? '' : 's'}`)),
         h('div', { class: 'choices' },

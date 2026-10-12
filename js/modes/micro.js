@@ -1,7 +1,8 @@
+import { studySeconds, formatStudyTime, finishStudyResult } from '../study-timer.js';
 // micro.js — 碎片模式：1–5 分钟主动练习（回忆 / 跟读 / 快答）
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
-import { addXP, logSession } from '../store.js';
+import { addXP } from '../store.js';
 import { nextDueCard, reviewCard } from '../srs.js';
 import { DAILY, PASSAGES, QUICK_QUESTIONS } from '../content.js';
 import { speak, stopSpeak, ttsAvailable, prefetch } from '../tts.js';
@@ -135,8 +136,8 @@ export function renderMicro(root) {
   root.append(h('div', { class: 'mode-wrap center' }, head, container));
 
   function updateStatus() {
-    const elapsed = Math.max(1, Math.round((Date.now() - session.startedAt) / 60000));
-    sub.textContent = `${session.tasksDone} task${session.tasksDone === 1 ? '' : 's'} done · about ${elapsed} min · +5 XP each`;
+    const elapsed = formatStudyTime(studySeconds());
+    sub.textContent = `${session.tasksDone} task${session.tasksDone === 1 ? '' : 's'} done · ${elapsed} active · +5 XP each`;
   }
 
   function next() {
@@ -152,20 +153,19 @@ export function renderMicro(root) {
   function save() {
     if (saved || session.tasksDone === 0) return false;
     saved = true;
-    // 按实际活跃时长计（最多到最后一次操作），避免闲置时间被算进去
-    const minutes = Math.max(1, Math.round((session.lastActive - session.startedAt) / 60000));
-    logSession('micro', minutes, `${session.tasksDone} tasks`);
-    return minutes;
+    finishStudyResult(`${session.tasksDone} tasks`);
+    return studySeconds();
   }
 
   function endSession() {
     stopSpeak();
-    const minutes = save();
-    if (minutes) toast(`${session.tasksDone} tasks · ${minutes} min this session`);
+    const seconds = save();
+    if (seconds) toast(`${session.tasksDone} tasks · ${formatStudyTime(seconds)} active`);
     location.hash = '#standby';
   }
 
   next();
+  const statusInterval = setInterval(updateStatus, 1000);
   // 被闲置跳转或切到其他页面时，也把已完成的任务记下来
-  return () => { stopSpeak(); save(); };
+  return () => { clearInterval(statusInterval); stopSpeak(); save(); };
 }

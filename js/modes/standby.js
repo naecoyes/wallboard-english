@@ -1,3 +1,4 @@
+import { sessionDay, sessionSeconds } from '../study-timer.js';
 // standby.js — 今日仪表盘（横屏一屏放下）
 // 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、该复习了、小提醒
 // 所有数字都来自真实学习记录（sessions / 卡组 / 打卡），不是手动勾选
@@ -63,14 +64,14 @@ function thisWeek() {
   mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   const byDay = {};
   for (const s of get().sessions) {
-    const k = studyDay(new Date(s.date));
-    byDay[k] = (byDay[k] || 0) + (s.minutes || 0);
+    const k = sessionDay(s);
+    byDay[k] = (byDay[k] || 0) + sessionSeconds(s) / 60;
   }
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(mon);
     d.setDate(mon.getDate() + i);
     const key = dayStr(d);
-    return { key, label: ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], minutes: byDay[key] || 0 };
+    return { key, label: ['M', 'T', 'W', 'T', 'F', 'S', 'S'][i], minutes: Math.floor(byDay[key] || 0) };
   });
 }
 
@@ -85,7 +86,7 @@ function build(root) {
   const g = greeting(mins, goal, streak, checked);
   const now = new Date();
   prefetch([item.en], { replace: true }); // 每日短语发音提前生成
-  const doneModes = new Set(s.sessions.filter(x => studyDay(new Date(x.date)) === today).map(x => x.mode));
+  const doneModes = new Set(s.sessions.filter(x => sessionDay(x) === today && (!x.timerId || x.result)).map(x => x.mode));
 
   // ---------- 问候 + 时钟 + 今日目标 ----------
   const clockEl = h('b', {}, '--:--');

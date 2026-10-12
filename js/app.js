@@ -6,6 +6,7 @@ import { initWakeLock } from './wakelock.js';
 import { icon } from './icons.js';
 import { initTheme } from './theme.js';
 import { initFullscreen } from './fullscreen.js';
+import { initStudyTimer, startStudyTimer } from './study-timer.js';
 import { renderStandby } from './modes/standby.js';
 import { renderMicro } from './modes/micro.js';
 import { renderFocus } from './modes/focus.js';
@@ -42,6 +43,7 @@ function route() {
   const name = (location.hash || '#standby').slice(1);
   const render = ROUTES[name] || renderStandby;
   if (cleanup) { try { cleanup(); } catch (_) {} cleanup = null; }
+  startStudyTimer(ROUTES[name] ? name : 'standby');
   screen.innerHTML = '';
   document.querySelectorAll('#topbar [data-nav]').forEach(a =>
     a.classList.toggle('active', a.dataset.nav === (ROUTES[name] ? name : 'standby')));
@@ -70,6 +72,7 @@ idleReset = resetIdle;
 // ---------- 启动 ----------
 initTheme();
 initFullscreen();
+initStudyTimer();
 initWakeLock();
 
 // Service Worker（离线缓存；file:// 下自动跳过）

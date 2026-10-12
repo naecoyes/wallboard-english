@@ -1,5 +1,6 @@
 // streak.js — 打卡与连续天数。日界为凌晨 4 点：4 点前算前一天，熬夜学习不断签。
 import { get, update } from './store.js';
+import { sessionSeconds, sessionDay } from './study-timer.js';
 
 /** 把 Date 转为 "YYYY-MM-DD"（本地时区） */
 export function dayStr(d = new Date()) {
@@ -55,9 +56,9 @@ export function displayStreak() {
 /** 今日已学分钟数（按学习日统计） */
 export function minutesToday() {
   const today = studyDay();
-  return get().sessions
-    .filter(s => studyDay(new Date(s.date)) === today)
-    .reduce((sum, s) => sum + (s.minutes || 0), 0);
+  return Math.floor(get().sessions
+    .filter(s => sessionDay(s) === today)
+    .reduce((sum, s) => sum + sessionSeconds(s), 0) / 60);
 }
 
 /** 近 7 天每天分钟数（含今天），用于热力条 */
@@ -69,9 +70,9 @@ export function last7Days() {
     d.setDate(d.getDate() - i);
     const ds = dayStr(d);
     const mins = get().sessions
-      .filter(s => studyDay(new Date(s.date)) === ds)
-      .reduce((sum, s) => sum + (s.minutes || 0), 0);
-    out.push({ day: ds, dow: 'SMTWTFS'[d.getDay()], minutes: mins });
+      .filter(s => sessionDay(s) === ds)
+      .reduce((sum, s) => sum + sessionSeconds(s), 0) / 60;
+    out.push({ day: ds, dow: 'SMTWTFS'[d.getDay()], minutes: Math.floor(mins) });
   }
   return out;
 }
