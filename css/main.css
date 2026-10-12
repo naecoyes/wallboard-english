@@ -562,6 +562,53 @@ html[data-theme="dark"] .answer { color: var(--ink); }
 .wm-note-group li { font-size: 1rem; line-height: 1.5; }
 
 /* ==========================================================
+   日常用句（场景筛选 + 绿色句子卡 + 场景句子列表）
+   ========================================================== */
+.sn-chips { display: flex; gap: .5rem; overflow-x: auto; padding: .125rem .125rem .375rem; scrollbar-width: none; flex-shrink: 0; }
+.sn-chips::-webkit-scrollbar { display: none; }
+.sn-chip {
+  display: flex; align-items: center; gap: .5rem; white-space: nowrap; flex-shrink: 0;
+  padding: .5rem .875rem; border-radius: 99px; font-size: .875rem; font-weight: 800; color: var(--ink);
+  background: var(--paper); border: 1px solid var(--line-2); transition: background .2s, border-color .2s;
+}
+.sn-chip small { font-size: .7rem; font-weight: 700; color: var(--muted); }
+.sn-chip.on { background: var(--green); border-color: var(--green); color: var(--on-green); }
+.sn-chip.on small { color: inherit; opacity: .75; }
+.sn-body { grid-template-columns: 1.15fr 1fr; }
+.sn-hero { padding: 1.75rem 2rem 1.5rem; }
+.sn-top { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.sn-scene { font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--hero-muted); }
+.sn-en { font-weight: 850; line-height: 1.16; letter-spacing: -.03em; margin: 1.25rem 0 .75rem; overflow-wrap: anywhere; }
+.sn-zh { font-size: 1.5rem; line-height: 1.5; color: var(--hero-soft); font-weight: 600; cursor: pointer; transition: filter .3s; min-height: 2.25rem; }
+.sn-note { margin-top: .5rem; font-size: .94rem; color: var(--hero-muted); }
+.sn-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1.25rem; }
+.sn-pill {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .6rem .9rem; border-radius: .8rem; font-weight: 750; font-size: .875rem;
+  color: #fff; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .33);
+}
+.sn-pill:active { background: rgba(255, 255, 255, .2); }
+.sn-pill.light { background: #fffefa; color: var(--deep); border-color: #fffefa; }
+.sn-src { margin-top: 1rem; font-size: .7rem; color: var(--hero-muted); opacity: .8; }
+.sn-nav { display: flex; gap: .625rem; flex-shrink: 0; }
+.sn-nav .wm-next { flex: 1; }
+.sn-prev {
+  width: 4.25rem; height: 4.25rem; flex-shrink: 0; border-radius: 1.125rem; display: grid; place-items: center;
+  color: #fff; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .28);
+}
+.sn-prev .ico { transform: rotate(180deg); }
+.sn-prev:active { background: rgba(255, 255, 255, .22); }
+.sn-list { display: flex; flex-direction: column; min-height: 0; padding-bottom: .75rem; }
+.sn-items { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: .125rem; margin: .25rem -.5rem 0; padding: 0 .5rem; }
+.sn-item { display: flex; align-items: center; gap: .75rem; text-align: left; padding: .6rem .625rem; border-radius: .75rem; color: var(--ink); background: transparent; border: none; font-size: .94rem; }
+.sn-item .idx { width: 1.75rem; height: 1.75rem; border-radius: .5rem; display: grid; place-items: center; flex-shrink: 0; font-size: .7rem; font-weight: 800; color: var(--muted); background: rgba(var(--tint), .05); }
+.sn-item .txt { flex: 1; line-height: 1.35; }
+.sn-item.done { color: var(--muted); }
+.sn-item.done .idx { background: var(--mint); color: var(--green); }
+.sn-item.on { background: var(--mint); font-weight: 800; }
+.sn-item.on .idx { background: var(--green); color: var(--on-green); }
+.sn-item:active { background: rgba(var(--tint), .06); }
+
+/* ==========================================================
    设置
    ========================================================== */
 .settings { max-width: var(--content-max); margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; padding-top: .375rem; }
@@ -651,6 +698,7 @@ textarea.import-box { min-height: 6.5rem; resize: vertical; font-size: .8rem; }
   .word-mode { height: auto; }
   .wm-body { grid-template-columns: 1fr; }
   .wm-side { overflow: visible; }
+  .sn-items { max-height: 22rem; }
 }
 @media (orientation: landscape) and (max-height: 560px) {
   .ec-dash { min-height: 0; }

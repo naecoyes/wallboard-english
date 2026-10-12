@@ -1,0 +1,49 @@
+# 人工审核后剔除的句子（忽略大小写与标点）。重新生成时自动应用。
+I'll get you something nice.
+Thanks to you I've lost my appetite.
+You'll find it difficult to meet her requirements.
+I think the time is right to introduce this product.
+I am pleased with his work.
+Why don't we order another round?
+I'll meet to you at eight.
+You have a very nice family.
+Let us know when you'll arrive.
+I'd like a room with a good view.
+It's high time you were in bed.
+I'll treat you to dinner.
+I don't sleep in a bed.
+I'd like to see your father.
+I want to see your mother.
+Don't tell anyone that I wet the bed.
+How much money do you have hidden under your bed?
+Can't you move your stuff to the other room?
+I can't distinguish him from his brother.
+How do you heat the house?
+You don't get up as early as your sister, do you?
+It's not fair to attribute your failure to your parents.
+I'm not ashamed of my father being poor.
+I don't have time to meet up with you.
+I'm sorry for the late response.
+I'm dying for a cold drink.
+I'm as hungry as a horse.
+How do I get my dog to eat dog food?
+I'm sure that this is a fresh water fish.
+I'll show you how to catch fish.
+It's better to chill white wine before you serve it.
+I think that it could use some salt.
+Do you know how to cook meat?
+Did you buy cat food?
+I think I can eat this.
+It's OK not to eat it.
+You're the one with all the money.
+Wear whatever you want to wear.
+How much honey should I buy?
+I want you to sleep on it.
+I gave my cold to him.
+At first, I thought they were sick.
+She thought that I was a doctor.
+He thought that I was very tired.
+I'm afraid it won't work.
+I hope it'll work next time.
+I think it'll turn out fine.
+It's cold there even in the summer.

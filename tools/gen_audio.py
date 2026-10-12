@@ -130,8 +130,7 @@ def main():
     size = sum(os.path.getsize(os.path.join(OUT, n)) for n in os.listdir(OUT) if n.endswith('.mp3'))
     print(f'单词完成：本次生成 {done}，失败 {len(failed)}{(" " + str(failed[:10])) if failed else ""}；'
           f'共 {len(have)} 个文件，{size / 1e6:.1f} MB', flush=True)
-    if os.environ.get('ONLY') != 'words':
-        sentences(key)
+    sentences(key)
 
 
 def sentences(key):

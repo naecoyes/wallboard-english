@@ -23,6 +23,7 @@ const defaults = () => ({
     voiceRev: 2,       // 默认音色版本：旧数据 <2 时迁移到男声
   },
   words: { idx: 0, known: [], unknown: [] }, // 单词模式进度：当前位置 / 太简单 / 不认识
+  sentences: { scene: 'all', pos: {}, known: [] }, // 日常用句：当前场景 / 各场景位置 / 已掌握的句子 id
   seeded: false,
 });
 
@@ -50,6 +51,8 @@ function migrate(data) {
     out.settings.voiceRev = 2;
   }
   out.words = { ...d.words, ...(data.words || {}) };
+  out.sentences = { ...d.sentences, ...(data.sentences || {}) };
+  if (!out.sentences.pos || typeof out.sentences.pos !== 'object') out.sentences.pos = {};
   out.cards = Array.isArray(data.cards) ? data.cards : [];
   out.sessions = Array.isArray(data.sessions) ? data.sessions : [];
   return out;

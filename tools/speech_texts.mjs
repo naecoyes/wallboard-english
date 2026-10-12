@@ -2,10 +2,12 @@
 // 供 tools/gen_audio.py 调用：node tools/speech_texts.mjs > 输出 JSON 数组
 import { DAILY, PASSAGES, QUICK_QUESTIONS, SEED_DECK } from '../js/content.js';
 import { WORDS } from '../js/words.js';
+import { SENTENCES } from '../js/sentences.js';
 const out = new Set();
 const add = t => { if (t && t.trim()) out.add(t.trim()); };
 for (const w of WORDS) for (const e of w.ex) add(e[0]);          // 单词例句
 for (const d of DAILY) add(d.en);                                  // 每日短语
+for (const x of SENTENCES) add(x.en);                              // 日常用句库
 for (const p of PASSAGES) {
   add(p.sentences.join(' '));                                      // 专注：整段播放
   p.sentences.forEach(add);                                        // 逐句跟读

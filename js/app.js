@@ -10,6 +10,7 @@ import { renderMicro } from './modes/micro.js';
 import { renderFocus } from './modes/focus.js';
 import { renderSettings } from './modes/settings.js';
 import { renderWord } from './modes/word.js';
+import { renderSentences } from './modes/sentences.js';
 
 // ---------- 首次运行：导入初始卡组 ----------
 if (!get().seeded) {
@@ -30,6 +31,7 @@ const ROUTES = {
   micro: renderMicro,
   focus: renderFocus,
   word: renderWord,
+  sentences: renderSentences,
   settings: renderSettings,
 };
 

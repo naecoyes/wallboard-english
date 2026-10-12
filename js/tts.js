@@ -29,9 +29,11 @@ export function localKeyPresent() { return !!localKey; }
 //   audio/words/<单词>.mp3   单词
 //   audio/s/<哈希>.mp3       句子 / 短语 / 短文，文件名 = 文本的 FNV-1a 64 位哈希
 let staticIdx = null; // { voice, words:Set, ids:Set }
+let staticIndexLoaded = false;
 const loadIdx = (url) => fetch(url, { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)).catch(() => null);
 export const staticAudioReady = Promise.all([loadIdx('audio/words/index.json'), loadIdx('audio/s/index.json')])
   .then(([w, s]) => {
+    staticIndexLoaded = true;
     if (!w && !s) return;
     staticIdx = {
       voice: (w || s).voice,
@@ -259,6 +261,10 @@ export function prefetchMode() { return get().settings.ttsPrefetch || 'smart'; }
  * replace=true 时丢弃上一屏还没生成的内容（换页时用），只保留当前屏幕的。
  */
 export function prefetch(texts, { replace = false } = {}) {
+  if (!staticIndexLoaded) {
+    staticAudioReady.then(() => prefetch(texts, { replace }));
+    return;
+  }
   const cfg = mimoConfig();
   if (prefetchMode() === 'off') return;
   const apiOk = cfg && Date.now() >= prefetchPaused;

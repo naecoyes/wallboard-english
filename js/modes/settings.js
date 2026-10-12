@@ -127,9 +127,9 @@ export function renderSettings(root) {
           toast('Audio cache cleared');
         },
       }, 'Clear')) : null,
-    row('headphones', 'c-indigo', mimoOn ? 'System voice (fallback)' : 'English voice',
+    row('headphones', 'c-indigo', 'System voice (fallback)',
       englishVoices().length
-        ? "The browser's built-in English voice, used when MiMo is unavailable"
+        ? 'Used only when MiMo audio is unavailable'
         : 'No English voice in this browser. Install one under the tablet\'s Text-to-speech settings, or use MiMo', voiceSelect),
     row('gauge', 'c-sky', 'Speaking speed', null, rateSelect),
     row('play', 'c-green', 'Preview', null,
@@ -234,7 +234,7 @@ export function renderSettings(root) {
     row('book', 'c-indigo', 'Show words when idle', 'Switch to Words after this long without a tap (never during Focus)', idleSelect),
     row('repeat', 'c-sky', 'Word auto-advance',
       `${wst.known.length} known · ${wst.unknown.length} learning (in your review deck)`, autoSelect),
-    row('volume', 'c-green', 'Read new words aloud', 'Each word is spoken when it appears, including auto-advance', autoPlaySel),
+    row('volume', 'c-green', 'Read aloud automatically', 'Words and sentences are spoken when they appear (words also when auto-advancing)', autoPlaySel),
     row('sun', 'c-amber', 'Keep screen on',
       wakeLockSupported() ? 'Tap the page once to activate'
         : !window.isSecureContext
@@ -284,7 +284,7 @@ export function renderSettings(root) {
         h('li', {}, `After ${s.settings.idleMin} min without a tap the app switches to Words; Focus sessions are never interrupted`)),
       h('div', { class: 'credits' },
         'Credits: word list, phonetics and definitions from ECDICT (MIT, github.com/skywind3000/ECDICT), IELTS-tagged entries. ',
-        'Example sentences from Tatoeba (tatoeba.org, CC BY 2.0 FR); sentence numbers are shown under each example. ',
+        'Example sentences and the Daily Sentences library from Tatoeba (tatoeba.org, CC BY 2.0 FR); sentence numbers are shown on each one. ',
         'Other examples and notes are original.')));
 
   const wrap = h('div', { class: 'settings' },
