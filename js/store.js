@@ -61,9 +61,28 @@ function migrate(data) {
 
 export function get() { return state; }
 
-export function save() {
+const saveHooks = [];
+export const onSave = (fn) => saveHooks.push(fn);
+let settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
+
+/** 设置变化时记录时间，同步时用来判断哪台设备的设置更新 */
+function touchSettings() {
+  const snap = JSON.stringify({ ...state.settings, mimoKey: '' });
+  if (snap !== settingsSnap) { settingsSnap = snap; state.settingsAt = Date.now(); }
+}
+
+export function save(silent = false) {
+  touchSettings();
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch (e) { console.warn('Save failed', e); }
+  if (!silent) saveHooks.forEach(f => f());
+}
+
+/** 用合并后的数据整体替换（同步用） */
+export function replaceState(next, { silent = false } = {}) {
+  state = migrate(next);
+  settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
+  save(silent);
 }
 
 export function update(fn) { fn(state); save(); }

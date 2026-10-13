@@ -6,6 +6,7 @@ import { initWakeLock } from './wakelock.js';
 import { icon } from './icons.js';
 import { initTheme } from './theme.js';
 import { initFullscreen } from './fullscreen.js';
+import { initSync } from './sync.js';
 import { initStudyTimer, startStudyTimer } from './study-timer.js';
 import { renderStandby } from './modes/standby.js';
 import { renderMicro } from './modes/micro.js';
@@ -72,6 +73,7 @@ idleReset = resetIdle;
 // ---------- 启动 ----------
 initTheme();
 initFullscreen();
+initSync();
 initStudyTimer();
 initWakeLock();
 

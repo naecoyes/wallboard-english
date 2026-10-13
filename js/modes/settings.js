@@ -7,6 +7,7 @@ import {
   localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady, staticAudioReady, staticAudioInfo,
 } from '../tts.js';
 import { wakeLockSupported, wakeLockActive, requestWakeLock } from '../wakelock.js';
+import { syncState, onSyncChange, connect, unlock, disconnect, syncNow, syncRepo } from '../sync.js';
 import { applyTheme, currentTheme, currentPalette, PALETTES } from '../theme.js';
 
 function row(ico, color, label, desc, ...controls) {
@@ -247,7 +248,46 @@ export function renderSettings(root) {
   // ---------- 数据 ----------
   const lastBk = s.settings.lastBackupHint;
   const importBox = h('textarea', { class: 'import-box', placeholder: 'Paste your backup JSON here…' });
+  // ---------- GitHub 同步 ----------
+  const sync = (() => {
+    const pill = h('span', { class: 'status-pill warn' });
+    const msg = h('small', {});
+    const repoIn = h('input', { class: 'key-input', placeholder: 'owner/repo (private data repo)', value: syncRepo() || 'naecoyes/wallboard-data', autocomplete: 'off' });
+    const tokIn = h('input', { type: 'password', class: 'key-input', placeholder: 'Fine-grained token (Contents: read & write)', autocomplete: 'off' });
+    const passIn = h('input', { type: 'password', class: 'key-input', placeholder: 'Passphrase (12+ characters)', autocomplete: 'off' });
+    const act = h('div', { class: 'btn-row', style: 'margin-top:4px' });
+    const form = h('div', { class: 'row stack' });
+    const paint = () => {
+      const st = syncState.status;
+      pill.className = 'status-pill ' + (st === 'ok' ? 'ok' : st === 'error' ? 'bad' : 'warn');
+      pill.textContent = { off: 'Off', locked: 'Locked', syncing: 'Syncing…', ok: 'Synced', error: 'Error' }[st];
+      msg.textContent = syncState.message || (st === 'ok' && syncState.last ? `Last sync ${new Date(syncState.last).toLocaleTimeString()}` : 'Progress is stored in your private GitHub repo. The token is encrypted on this device.');
+      form.replaceChildren(); act.replaceChildren();
+      if (st === 'off') {
+        form.append(repoIn, tokIn, passIn);
+        act.append(h('span', { class: 'spacer' }), h('button', { class: 'btn sm blue', onclick: async (e) => {
+          if (passIn.value.length < 12) return toast('Passphrase needs 12+ characters');
+          e.target.disabled = true;
+          try { await connect({ repo: repoIn.value, tokenText: tokIn.value, pass: passIn.value }); toast('Sync connected'); }
+          catch (err) { toast(err.message); } finally { e.target.disabled = false; paint(); }
+        } }, 'Connect'));
+      } else if (st === 'locked') {
+        form.append(passIn);
+        act.append(h('button', { class: 'btn sm danger', onclick: async () => { await disconnect(); paint(); } }, 'Disconnect'), h('span', { class: 'spacer' }),
+          h('button', { class: 'btn sm blue', onclick: async () => { try { await unlock(passIn.value); toast('Unlocked'); } catch (err) { toast(err.message); } paint(); } }, 'Unlock'));
+      } else {
+        act.append(h('button', { class: 'btn sm danger', onclick: async () => { await disconnect(); paint(); } }, 'Disconnect'), h('span', { class: 'spacer' }),
+          h('button', { class: 'btn sm', onclick: () => syncNow() }, 'Sync now'));
+      }
+    };
+    onSyncChange(paint); paint();
+    return h('div', { class: 'row stack' },
+      h('div', { class: 'row-top' }, h('span', { class: 'r-ico c-sky' }, icon('repeat', 20)),
+        h('div', { class: 'r-label' }, 'GitHub sync', msg), pill), form, act);
+  })();
+
   const dataGroup = group('Data',
+    sync,
     row('download', 'c-indigo', 'Export backup',
       lastBk ? `Last export: ${new Date(lastBk).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Never exported — weekly is a good habit',
       h('button', {
