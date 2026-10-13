@@ -12,14 +12,10 @@ import { openExternalStudy } from '../external-study.js';
 import { speak, ttsAvailable, prefetch } from '../tts.js';
 
 const RESOURCES = [
-  ['人人都能用英语', 'https://github.com/ZuodaoTech/everyone-can-use-english', 'Build a learning mindset around using English, beyond memorizing words and taking tests.'],
-  ['English Level Up Tips', 'https://github.com/byoungd/english-level-up-tips', 'Turn years of English study into practical skills you can use.'],
-  ['1000 Hours', 'https://github.com/xiaolai/1000-hours', 'Plan long-term practice across listening, speaking, reading and writing.'],
-  ['Awesome English', 'https://github.com/yvoronoy/awesome-english', 'Explore resources for language skills, grammar and AI learning tools.'],
-  ['COCA English Anki Deck', 'https://github.com/Ecattea/COCA-English-Anki-Deck', 'Study frequent words with English definitions and audio in Anki.'],
-  ['Awesome Language Learning', 'https://github.com/Vuizur/awesome-language-learning', 'Find dictionaries, Anki resources, reading tools and language apps.'],
-  ['Mr.G Your AI English Tutor', 'https://github.com/EmbraceAGI/Mr.G-Your-AI-English-all-language-Tutor', 'Practice English with an AI tutor using ChatGPT, Claude or Gemini.'],
-  ['Inglés Para Programar', 'https://github.com/Yamila-Orozco/inglesParaProgramar', 'Learn technical English for documentation, code and error messages.'],
+  // 只收录有独立网站的项目（GitHub 仓库的 homepage），不直接打开仓库页面
+  ['1000 Hours · 人人都能用英语', 'https://1000h.org/', 'A long-term plan to actually use English: listening, shadowing and self-training.'],
+  ['English Level Up Tips', 'https://byoungd.github.io/up/', 'Turn years of English study into practical skills you can use.'],
+  ['Awesome English', 'https://yvoronoy.github.io/awesome-english/', 'Explore resources for language skills, grammar and AI learning tools.'],
 ];
 
 const TIPS = [
@@ -252,14 +248,14 @@ function build(root) {
       h('aside', { class: 'ec-col' }, stats, weekly, review)),
     h('section', { class: 'ec-card learning-resources' },
       h('h2', {}, 'English Learning Resources'),
-      h('p', { class: 'resources-intro' }, 'Eight GitHub collections for learning methods, daily practice and useful tools. Start an external study session or open without timing.'),
+      h('p', { class: 'resources-intro' }, 'Websites for learning methods, daily practice and useful tools. Start an external study session or open without timing.'),
       h('div', { class: 'resources-grid' }, ...RESOURCES.map(([title, url, description], i) =>
         h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer', onclick: e => {
           if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
           e.preventDefault(); openExternalStudy(title, url);
         } },
           h('span', { class: 'resource-number' }, String(i + 1).padStart(2, '0')),
-          h('div', {}, h('h3', {}, title), h('p', {}, description), h('small', {}, new URL(url).pathname.slice(1))),
+          h('div', {}, h('h3', {}, title), h('p', {}, description), h('small', {}, (new URL(url).host + new URL(url).pathname).replace(/\/$/, ''))),
           icon('arrowRight', 18))))));
   root.append(wrap);
 
