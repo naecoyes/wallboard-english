@@ -154,7 +154,7 @@ export function renderWord(root) {
 
     const hero = h('section', { class: 'wm-hero glass' },
       h('div', { class: 'wm-top' },
-        h('div', { class: 'wm-word', style: 'font-size:5.25rem' }, w.w),
+        h('button', { type: 'button', class: 'wm-word readable', style: 'font-size:5.25rem', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, w.w),
         h('button', { class: 'wm-speak', 'aria-label': 'Read word and example', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, icon('volume', 30))),
       h('div', { class: 'wm-ipa-row' },
         h('span', { class: 'wm-ipa' }, w.ipa),
@@ -197,7 +197,7 @@ export function renderWord(root) {
         }, 'Reveal translation');
         return h('div', { class: 'wm-ex' + (i === 0 ? ' first' : '') },
           h('div', { class: 'wm-ex-main' },
-            h('div', { class: 'wm-en' }, highlight(en, w)),
+            h('button', { type: 'button', class: 'wm-en readable', title: 'Read example', onclick: () => say(en) }, highlight(en, w)),
             reveal, translation,
             h('div', { class: 'wm-src' }, eid ? `Source: Tatoeba #${eid} · CC BY 2.0 FR` : 'Source: original')),
           h('button', { class: 'icon-btn sm', 'aria-label': 'Read example', onclick: () => say(en) }, icon('volume', 18)));

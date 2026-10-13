@@ -142,7 +142,7 @@ export function renderSentences(root) {
       h('div', { class: 'sn-top' },
         h('span', { class: 'sn-scene' }, sceneName),
         h('div', { class: 'wm-pills' }, laterBtn, h('span', { class: 'wm-sep' }), knownBtn)),
-      h('div', { class: 'sn-en', style: `font-size:${sizeFor(s.en)}rem` }, s.en),
+      h('button', { type: 'button', class: 'sn-en readable', style: `font-size:${sizeFor(s.en)}rem`, title: 'Read sentence', onclick: () => say(s.en) }, s.en),
       zh, note,
       h('div', { class: 'sn-actions' },
         h('button', { class: 'sn-pill light', onclick: () => say(s.en) }, icon('volume', 16), 'Listen'),
