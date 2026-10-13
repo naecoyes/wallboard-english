@@ -1,4 +1,16 @@
 :fullscreen { background: var(--bg); }
+.learning-resources { margin-top: .5rem; flex-shrink: 0; }
+.learning-resources h2 { margin: 0; font-size: 1.4rem; }
+.resources-intro { color: var(--muted); font-size: .9rem; margin: .4rem 0 1rem; }
+.resources-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); gap: .75rem; }
+.resource-link { display: flex; align-items: flex-start; gap: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--ink); text-decoration: none; min-width: 0; }
+.resource-link:hover { background: var(--mint); border-color: var(--green); }
+.resource-link > div { flex: 1; min-width: 0; }
+.resource-link h3 { margin: 0; font-size: 1rem; }
+.resource-link p { margin: .4rem 0; color: var(--muted); font-size: .875rem; }
+.resource-link small { color: var(--faint); font-size: .7rem; overflow-wrap: anywhere; }
+.resource-number { color: var(--green); font-weight: 850; }
+.resource-link > .ico { color: var(--green); margin-top: .2rem; }
 .wm-english-defs { margin: .3rem 0 .6rem; padding-left: 1.4rem; font-size: 1.15rem; line-height: 1.5; }
 .wm-english-defs li + li { margin-top: .5rem; }
 [hidden] { display: none !important; }

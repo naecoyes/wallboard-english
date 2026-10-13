@@ -10,6 +10,17 @@ import { dueCards, addCard, reviewCard } from '../srs.js';
 import { DAILY } from '../content.js';
 import { speak, ttsAvailable, prefetch } from '../tts.js';
 
+const RESOURCES = [
+  ['人人都能用英语', 'https://github.com/ZuodaoTech/everyone-can-use-english', 'Build a learning mindset around using English, beyond memorizing words and taking tests.'],
+  ['English Level Up Tips', 'https://github.com/byoungd/english-level-up-tips', 'Turn years of English study into practical skills you can use.'],
+  ['1000 Hours', 'https://github.com/xiaolai/1000-hours', 'Plan long-term practice across listening, speaking, reading and writing.'],
+  ['Awesome English', 'https://github.com/yvoronoy/awesome-english', 'Explore resources for language skills, grammar and AI learning tools.'],
+  ['COCA English Anki Deck', 'https://github.com/Ecattea/COCA-English-Anki-Deck', 'Study frequent words with English definitions and audio in Anki.'],
+  ['Awesome Language Learning', 'https://github.com/Vuizur/awesome-language-learning', 'Find dictionaries, Anki resources, reading tools and language apps.'],
+  ['Mr.G Your AI English Tutor', 'https://github.com/EmbraceAGI/Mr.G-Your-AI-English-all-language-Tutor', 'Practice English with an AI tutor using ChatGPT, Claude or Gemini.'],
+  ['Inglés Para Programar', 'https://github.com/Yamila-Orozco/inglesParaProgramar', 'Learn technical English for documentation, code and error messages.'],
+];
+
 const TIPS = [
   "You don't need every word. Get the gist first, then make one or two lines your own.",
   'Stuck? Copy the sentence, then swap one word. Imitation is where speaking starts.',
@@ -237,7 +248,15 @@ function build(root) {
     greet,
     h('main', { class: 'ec-grid' },
       h('div', { class: 'ec-col' }, hero, route, tip),
-      h('aside', { class: 'ec-col' }, stats, weekly, review)));
+      h('aside', { class: 'ec-col' }, stats, weekly, review)),
+    h('section', { class: 'ec-card learning-resources' },
+      h('h2', {}, 'English Learning Resources'),
+      h('p', { class: 'resources-intro' }, 'Eight GitHub collections for learning methods, daily practice and useful tools. Opens in a new tab.'),
+      h('div', { class: 'resources-grid' }, ...RESOURCES.map(([title, url, description], i) =>
+        h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer' },
+          h('span', { class: 'resource-number' }, String(i + 1).padStart(2, '0')),
+          h('div', {}, h('h3', {}, title), h('p', {}, description), h('small', {}, new URL(url).pathname.slice(1))),
+          icon('arrowRight', 18))))));
   root.append(wrap);
 
   const tick = () => {
