@@ -25,7 +25,11 @@ export function initFullscreen() {
           toast('Fullscreen is unavailable. Try adding this site to your home screen.');
           return;
         }
-        await request.call(root);
+        if (root.requestFullscreen) {
+          await request.call(root, { navigationUI: 'hide' });
+        } else {
+          await request.call(root);
+        }
       }
       sync();
     } catch {
