@@ -1,4 +1,13 @@
 :fullscreen { background: var(--bg); }
+.external-dialog { width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--paper); color: var(--ink); padding: 1.5rem; }
+.external-dialog::backdrop { background: rgba(0,0,0,.5); }
+.external-dialog h2 { margin-top: 0; }
+.external-dialog label { display: flex; flex-direction: column; gap: .4rem; }
+.external-dialog select, .external-dialog input { background: var(--bg); color: var(--ink); padding: .65rem; border: 1px solid var(--line-2); border-radius: .5rem; width: 100%; }
+.external-dialog .btn-row { flex-wrap: wrap; margin-top: 1rem; }
+.external-duration { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.external-banner { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; flex-shrink: 0; margin: .5rem var(--pad-x); padding: .7rem 1rem; background: var(--mint); border-radius: var(--r-sm); }
+.external-banner span { flex: 1; min-width: 10rem; font-size: .875rem; }
 .learning-resources { margin-top: .5rem; flex-shrink: 0; }
 .learning-resources h2 { margin: 0; font-size: 1.4rem; }
 .resources-intro { color: var(--muted); font-size: .9rem; margin: .4rem 0 1rem; }

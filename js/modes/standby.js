@@ -8,6 +8,7 @@ import { get, addXP } from '../store.js';
 import { displayStreak, minutesToday, studyDay, hasCheckedInToday, dayStr } from '../streak.js';
 import { dueCards, addCard, reviewCard } from '../srs.js';
 import { DAILY } from '../content.js';
+import { openExternalStudy } from '../external-study.js';
 import { speak, ttsAvailable, prefetch } from '../tts.js';
 
 const RESOURCES = [
@@ -251,9 +252,12 @@ function build(root) {
       h('aside', { class: 'ec-col' }, stats, weekly, review)),
     h('section', { class: 'ec-card learning-resources' },
       h('h2', {}, 'English Learning Resources'),
-      h('p', { class: 'resources-intro' }, 'Eight GitHub collections for learning methods, daily practice and useful tools. Opens in a new tab.'),
+      h('p', { class: 'resources-intro' }, 'Eight GitHub collections for learning methods, daily practice and useful tools. Start an external study session or open without timing.'),
       h('div', { class: 'resources-grid' }, ...RESOURCES.map(([title, url, description], i) =>
-        h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer' },
+        h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer', onclick: e => {
+          if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          e.preventDefault(); openExternalStudy(title, url);
+        } },
           h('span', { class: 'resource-number' }, String(i + 1).padStart(2, '0')),
           h('div', {}, h('h3', {}, title), h('p', {}, description), h('small', {}, new URL(url).pathname.slice(1))),
           icon('arrowRight', 18))))));

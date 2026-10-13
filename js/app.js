@@ -7,6 +7,8 @@ import { icon } from './icons.js';
 import { initTheme } from './theme.js';
 import { initFullscreen } from './fullscreen.js';
 import { initSync } from './sync.js';
+import { initExternalStudy, externalStudyActive } from './external-study.js';
+import { pauseStudyTimer } from './study-timer.js';
 import { initStudyTimer, startStudyTimer } from './study-timer.js';
 import { renderStandby } from './modes/standby.js';
 import { renderMicro } from './modes/micro.js';
@@ -45,6 +47,7 @@ function route() {
   const render = ROUTES[name] || renderStandby;
   if (cleanup) { try { cleanup(); } catch (_) {} cleanup = null; }
   startStudyTimer(ROUTES[name] ? name : 'standby');
+  if (externalStudyActive()) pauseStudyTimer(true);
   screen.innerHTML = '';
   document.querySelectorAll('#topbar [data-nav]').forEach(a =>
     a.classList.toggle('active', a.dataset.nav === (ROUTES[name] ? name : 'standby')));
@@ -61,10 +64,11 @@ let idleReset = null;
 
 function resetIdle() {
   clearTimeout(idleTimer);
+  if (externalStudyActive()) return;
   const hash = location.hash || '';
   if (hash === '#focus' || hash === '#word' || hash === '#sentences') return; // 专注有自己的计时；单词模式本身就是待机内容
   const idleMs = Math.max(1, get().settings.idleMin || 2) * 60 * 1000;
-  idleTimer = setTimeout(() => { location.hash = '#word'; }, idleMs);
+  idleTimer = setTimeout(() => { if (!externalStudyActive()) location.hash = '#word'; }, idleMs);
 }
 idleReset = resetIdle;
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
@@ -84,3 +88,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 
 if (!location.hash) location.hash = '#standby';
 route();
+initExternalStudy();
