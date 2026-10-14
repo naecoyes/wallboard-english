@@ -2,7 +2,7 @@ import { sessionDay, sessionSeconds } from '../study-timer.js';
 // standby.js — 今日仪表盘（横屏一屏放下）
 // 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、该复习了、小提醒
 // 所有数字都来自真实学习记录（sessions / 卡组 / 打卡），不是手动勾选
-import { h, toast, countUp } from '../ui.js';
+import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { get, addXP } from '../store.js';
 import { displayStreak, minutesToday, studyDay, hasCheckedInToday, dayStr } from '../streak.js';
@@ -126,7 +126,7 @@ function build(root) {
       h('div', { class: 'ec-clock' }, clockEl, dateEl),
       h('div', { class: 'goal-chip' },
         h('div', { class: 'goal-icon' }, icon('sparkle', 18)),
-        h('div', {}, h('small', {}, "Today's goal"), h('strong', {}, countUp(h('span', {}), mins), ` / ${goal} min`)))));
+        h('div', {}, h('small', {}, "Today's goal"), h('strong', {}, `${mins} / ${goal} min`)))));
 
   // ---------- 每日短语（绿色主卡） ----------
   let revealed = false;
@@ -186,11 +186,11 @@ function build(root) {
   const stats = h('div', { class: 'stats-grid' },
     h('section', { class: 'ec-card stat-card' },
       h('div', { class: 'stat-top' }, h('span', {}, 'Streak'), h('span', { class: 'stat-emoji fire' }, icon('flame', 16))),
-      h('div', { class: 'stat-number' }, countUp(h('span', {}), streak), h('small', {}, streak === 1 ? 'day' : 'days')),
+      h('div', { class: 'stat-number' }, String(streak), h('small', {}, streak === 1 ? 'day' : 'days')),
       h('div', { class: 'stat-foot' }, streak === 0 ? 'Start your rhythm today' : streak === 1 ? 'Day one — keep going!' : `Best: ${s.profile.bestStreak} days`)),
     h('section', { class: 'ec-card stat-card' },
       h('div', { class: 'stat-top' }, h('span', {}, 'This week'), h('span', { class: 'stat-emoji' }, icon('timer', 16))),
-      h('div', { class: 'stat-number' }, countUp(h('span', {}), weekTotal), h('small', {}, 'min')),
+      h('div', { class: 'stat-number' }, String(weekTotal), h('small', {}, 'min')),
       h('div', { class: 'stat-foot' }, `Lv.${s.profile.level} · ${s.profile.xp} XP total`)));
 
   // ---------- 右栏：本周节奏 ----------

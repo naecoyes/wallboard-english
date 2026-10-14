@@ -1,7 +1,7 @@
 // word.js — 单词模式：长时间无操作时的默认屏（环境式背雅思单词）
 // 横屏：左 = 单词 / 音标 / 考试标签 / 释义 / 操作；右 = 例句（含 Tatoeba 出处）/ 单词笔记
 // 词库 words.js 约 1.5MB，进入本页时才按需加载，不拖慢其他页面
-import { h, toast, celebrate } from '../ui.js';
+import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
@@ -146,7 +146,6 @@ export function renderWord(root) {
           s.words.unknown = s.words.unknown.filter(x => x !== w.w);
         });
         toast("Marked as known — it won't show again");
-        celebrate();
         next();
       },
     }, icon('check', 16), 'Too easy');
@@ -162,7 +161,6 @@ export function renderWord(root) {
       type: 'button', class: 'wm-meaning-flip', 'aria-pressed': 'false',
       onclick: () => {
         chineseFace = !chineseFace; paintMeaning();
-        meaningContent.classList.remove('flip-in'); void meaningContent.offsetWidth; meaningContent.classList.add('flip-in');
       },
     }, meaningContent, meaningHint);
     function paintMeaning() {

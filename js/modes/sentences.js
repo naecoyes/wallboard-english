@@ -1,7 +1,7 @@
 // sentences.js — 日常用句模式：按生活场景浏览 1200+ 条常用句子
 // 左：绿色句子卡（英文大字 + 点击揭晓中文 + 朗读 / 慢速 + 会了 / 稍后复习）；右：当前场景的句子列表
 // 句库约 150 KB，进入本页时才按需加载
-import { h, toast, celebrate } from '../ui.js';
+import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { AdvanceClock } from '../auto-advance.js';
 import { lookupFromEvent } from '../lookup.js';
@@ -130,7 +130,7 @@ export function renderSentences(root) {
         update(st => {
           st.sentences.known = was ? st.sentences.known.filter(x => x !== s.id) : [...st.sentences.known, s.id];
         });
-        if (!was) { addXP(1); toast('Marked as known'); celebrate(); }
+        if (!was) { addXP(1); toast('Marked as known'); }
         paintChips();
         if (!was) go(pos + 1); else paint(false);
       },
