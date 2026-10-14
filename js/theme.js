@@ -36,16 +36,42 @@ export function currentPalette() {
   return IDS.has(p) ? p : 'forest';
 }
 
+/** 是否处于深夜极暗模式（23:00–06:00 自动开启，或 ?dim=1 强制预览） */
+export function isDimmed(now = new Date()) {
+  const forced = new URLSearchParams(location.search).get('dim');
+  if (forced === '1' || forced === 'true') return true;
+  if (forced === '0' || forced === 'false') return false;
+  const mode = get().settings.nightDim || 'auto';
+  if (mode === 'on') return true;
+  if (mode === 'off') return false;
+  const h = now.getHours() + now.getMinutes() / 60;
+  return h >= 23 || h < 6;
+}
+
 let metaSynced = false;
 export function applyTheme() {
   const root = document.documentElement;
   const t = currentTheme();
   const p = currentPalette();
+  const dim = isDimmed() ? '1' : '0';
+  const shiftOn = get().settings.pixelShift !== false;
+  const appEl = document.getElementById('app');
+  if (appEl) {
+    if (shiftOn) {
+      const m = new Date().getMinutes();
+      const dx = (m % 5) - 2;
+      const dy = (Math.floor(m / 5) % 3) - 1;
+      appEl.style.transform = `translate(${dx}px, ${dy}px)`;
+    } else {
+      appEl.style.transform = '';
+    }
+  }
   // 首帧脚本已经设好 theme/palette，但还没同步地址栏颜色，所以第一次调用一定要往下走
-  if (metaSynced && root.dataset.theme === t && root.dataset.palette === p) return;
+  if (metaSynced && root.dataset.theme === t && root.dataset.palette === p && root.dataset.dim === dim) return;
   metaSynced = true;
   root.dataset.theme = t;
   root.dataset.palette = p;
+  root.dataset.dim = dim;
   // 浏览器地址栏 / 状态栏颜色跟随当前背景色
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', getComputedStyle(root).getPropertyValue('--bg').trim() || '#f4f3ed');

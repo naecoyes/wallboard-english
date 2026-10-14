@@ -221,6 +221,23 @@ export function renderSettings(root) {
   const syncChecks = () => paletteBtns.forEach(b => { b.querySelector('.nm .ico').style.visibility = b.classList.contains('on') ? 'visible' : 'hidden'; });
   paletteBtns.forEach(b => b.addEventListener('click', syncChecks));
 
+  const dimSel = h('select', {},
+    ...[['auto', 'Auto (23:00–06:00)'], ['on', 'Always dimmed'], ['off', 'Off']].map(([v, t]) =>
+      h('option', { value: v, ...((s.settings.nightDim || 'auto') === v ? { selected: '' } : {}) }, t)));
+  dimSel.addEventListener('change', () => {
+    update(st => { st.settings.nightDim = dimSel.value; });
+    applyTheme();
+    toast('Late-night dim saved');
+  });
+  const shiftSel = h('select', {},
+    ...[['on', 'On (1–2 px/min)'], ['off', 'Off']].map(([v, t]) =>
+      h('option', { value: v, ...((s.settings.pixelShift !== false ? 'on' : 'off') === v ? { selected: '' } : {}) }, t)));
+  shiftSel.addEventListener('change', () => {
+    update(st => { st.settings.pixelShift = shiftSel.value === 'on'; });
+    applyTheme();
+    toast('Screen protection saved');
+  });
+
   const displayGroup = group('Display',
     h('div', { class: 'row stack' },
       h('div', { class: 'row-top' },
@@ -229,7 +246,9 @@ export function renderSettings(root) {
       h('div', { class: 'palette-grid' }, ...paletteBtns)),
     row('sun', 'c-amber', 'Day / night', `Now: ${currentTheme() === 'light' ? 'day' : 'night'}`, themeSel),
     row('timer', 'c-sky', 'Daytime hours', 'In Auto mode, the day palette is used between these hours',
-      hourSel('dayStart', 5, 10), h('span', { class: 'setting-dash' }, 'to'), hourSel('dayEnd', 16, 22)));
+      hourSel('dayStart', 5, 10), h('span', { class: 'setting-dash' }, 'to'), hourSel('dayEnd', 16, 22)),
+    row('moon', 'c-indigo', 'Late-night dim', 'Lowers brightness and contrast late at night for wall-mounted display', dimSel),
+    row('repeat', 'c-green', 'Burn-in pixel shift', 'Subtly shifts the layout by 1–2 px every minute to protect the screen', shiftSel));
 
   const learnGroup = group('Study',
     row('target', 'c-green', 'Daily goal', 'Minutes per day, 5–120', goalInput),

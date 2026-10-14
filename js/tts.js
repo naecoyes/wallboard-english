@@ -52,14 +52,25 @@ export function textId(text) {
   return h.toString(16).padStart(16, '0');
 }
 
+const OVERRIDES_KEY = 'wallboard-tts-overrides-v1';
+let overrides = {};
+try { overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') || {}; } catch {}
+function saveOverrides() {
+  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch {}
+}
+export function hasAudioOverride(text) {
+  return !!overrides[(text || '').trim().toLowerCase()];
+}
+
 /** 这段文本有预生成的文件、且音色与当前设置一致（或没在用 MiMo）时，返回文件地址 */
 function staticUrl(text) {
   if (!staticIdx) return null;
+  const t = (text || '').trim();
+  if (overrides[t.toLowerCase()]) return null; // 用户手动标记了重生成或改用系统语音
   const s = get().settings;
   if (s.ttsProvider === 'system') return null;
   const cfg = mimoConfig();
   if (cfg && cfg.voice !== staticIdx.voice) return null; // 用户换了别的音色，就按新音色实时生成
-  const t = text.trim();
   if (staticIdx.words.has(t)) return `audio/words/${t.toLowerCase().replace(/[^a-z0-9-]/g, '_')}.mp3`;
   const id = textId(t);
   return staticIdx.ids.has(id) ? `audio/s/${id}.mp3` : null;
@@ -95,7 +106,7 @@ function pickVoice() {
     const v = ens.find(v => v.voiceURI === saved);
     if (v) return v;
   }
-  return ens.find(v => v.lang === 'en-US') || ens[0] || null;
+  return ens.find(v => v.lang.replace('_', '-') === 'en-GB') || ens.find(v => v.lang.replace('_', '-') === 'en-US') || ens[0] || null;
 }
 
 function speakSystem(text, rate) {
@@ -326,6 +337,19 @@ export async function speak(text, { rate, auto = false } = {}) {
   stopSpeak();
   const my = ++seq;
   const r = rate ?? get().settings.rate ?? 0.95;
+  const norm = (text || '').trim().toLowerCase();
+  if (overrides[norm] === 'system') {
+    return speakSystem(text, r);
+  }
+  if (overrides[norm] === 'mimo') {
+    const oKey = `override|${norm}`;
+    const hit = mem.get(oKey) || await cacheGet(oKey);
+    if (hit) {
+      remember(oKey, hit);
+      if (my !== seq) return false;
+      return await playBlob(hit, r, auto);
+    }
+  }
   const cfg = mimoConfig();
   const url = staticUrl(text);
   if (url || cfg) {
@@ -370,6 +394,44 @@ export function stopSpeak() {
   if (!audio.paused) audio.pause();
   if (finishCurrent) { finishCurrent(false); finishCurrent = null; }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+/** 单字/单句发音纠错：有 MiMo Key 时重新请求并覆盖缓存；无 Key 时切换为浏览器语音（再点可恢复默认预生成音频） */
+export async function regenerateAudio(text) {
+  const t = (text || '').trim();
+  if (!t) return false;
+  const norm = t.toLowerCase();
+  const cfg = mimoConfig();
+  stopSpeak();
+  if (cfg) {
+    setLoading(true);
+    try {
+      const blob = await fetchMimo(t, cfg);
+      const oKey = `override|${norm}`;
+      const cKey = keyFor(t, cfg);
+      cachePut(oKey, blob);
+      cachePut(cKey, blob);
+      remember(oKey, blob);
+      remember(cKey, blob);
+      overrides[norm] = 'mimo';
+      saveOverrides();
+      setLoading(false);
+      toast(`Re-generated "${t}" audio`);
+      return await playBlob(blob, get().settings.rate ?? 0.95, false);
+    } catch (e) {
+      setLoading(false);
+    }
+  }
+  if (overrides[norm] === 'system') {
+    delete overrides[norm];
+    saveOverrides();
+    toast(`Restored built-in audio for "${t}"`);
+    return speak(t);
+  }
+  overrides[norm] = 'system';
+  saveOverrides();
+  toast(`Switched "${t}" to browser voice (tap again to restore)`);
+  return speakSystem(t, get().settings.rate ?? 0.95);
 }
 
 /** 设置页「测试连接」：直接请求一次，返回 {ok, ms, error} */

@@ -9,6 +9,7 @@ import { displayStreak, minutesToday, studyDay, hasCheckedInToday, dayStr } from
 import { dueCards, addCard, reviewCard } from '../srs.js';
 import { DAILY } from '../content.js';
 import { openExternalStudy } from '../external-study.js';
+import { openDeck } from '../deck.js';
 import { speak, ttsAvailable, prefetch } from '../tts.js';
 
 const RESOURCES = [
@@ -83,6 +84,23 @@ function thisWeek() {
   });
 }
 
+function openResources() {
+  const dlg = h('dialog', { class: 'external-dialog', 'aria-label': 'English learning resources' },
+    h('h2', {}, 'English Learning Resources'),
+    h('p', { class: 'resources-intro' }, 'Websites for learning methods and tools. Start an external study session or open without timing.'),
+    h('div', { class: 'resources-grid' }, ...RESOURCES.map(([title, url, description], i) =>
+      h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer', onclick: e => {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault(); dlg.close(); dlg.remove(); openExternalStudy(title, url);
+      } },
+        h('span', { class: 'resource-number' }, String(i + 1).padStart(2, '0')),
+        h('div', {}, h('h3', {}, title), h('p', {}, description)),
+        icon('arrowRight', 18)))),
+    h('div', { class: 'btn-row' }, h('button', { class: 'btn ghost', onclick: () => { dlg.close(); dlg.remove(); } }, 'Close')));
+  document.body.append(dlg);
+  dlg.showModal();
+}
+
 function build(root) {
   const s = get();
   const goal = s.settings.dailyGoalMin;
@@ -146,7 +164,7 @@ function build(root) {
   const route = h('section', { class: 'ec-card ec-route' },
     h('div', { class: 'ec-head' },
       h('div', {}, h('h2', {}, "Today's plan"), h('p', {}, 'Just go in order — no need to decide what to study.')),
-      h('a', { class: 'text-btn', href: '#focus' }, 'Start 25-min focus')),
+      h('div', { class: 'btn-group' }, h('button', { class: 'text-btn', onclick: openResources }, 'Resources'), h('a', { class: 'text-btn', href: '#focus' }, 'Start 25-min focus'))),
     h('div', { class: 'tasks' },
       ...ROUTE.map(t => {
         const done = doneModes.has(t.by);
@@ -194,7 +212,8 @@ function build(root) {
   const reviewBox = h('div', {});
   const review = h('section', { class: 'ec-card ec-review' },
     h('div', { class: 'ec-head' },
-      h('div', {}, h('h2', {}, 'Time to review'), h('p', {}, "Recall first, then reveal. Forgetting is normal.")), icon('undo', 18)),
+      h('div', {}, h('h2', {}, 'Time to review'), h('p', {}, "Recall first, then reveal. Forgetting is normal.")),
+      h('button', { class: 'text-btn', onclick: () => openDeck(() => paintReview()) }, `Deck (${s.cards.length})`)),
     reviewBox);
   function paintReview() {
     const due = dueCards();
@@ -246,17 +265,7 @@ function build(root) {
     h('main', { class: 'ec-grid' },
       h('div', { class: 'ec-col' }, hero, route, tip),
       h('aside', { class: 'ec-col' }, stats, weekly, review)),
-    h('section', { class: 'ec-card learning-resources' },
-      h('h2', {}, 'English Learning Resources'),
-      h('p', { class: 'resources-intro' }, 'Websites for learning methods, daily practice and useful tools. Start an external study session or open without timing.'),
-      h('div', { class: 'resources-grid' }, ...RESOURCES.map(([title, url, description], i) =>
-        h('a', { class: 'resource-link', href: url, target: '_blank', rel: 'noopener noreferrer', onclick: e => {
-          if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-          e.preventDefault(); openExternalStudy(title, url);
-        } },
-          h('span', { class: 'resource-number' }, String(i + 1).padStart(2, '0')),
-          h('div', {}, h('h3', {}, title), h('p', {}, description), h('small', {}, (new URL(url).host + new URL(url).pathname).replace(/\/$/, ''))),
-          icon('arrowRight', 18))))));
+    null);
   root.append(wrap);
 
   const tick = () => {

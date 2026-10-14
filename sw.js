@@ -1,5 +1,8 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v28'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v29'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+// 词库 / 句库（约 1.7 MB）单独缓存：改界面升级版本号时不必重新下载，后台静默更新
+const DATA_CACHE = 'wallboard-data-v1';
+const DATA_FILES = ['./js/words.js', './js/sentences.js'];
 const ASSETS = [
   './',
   './index.html',
@@ -17,13 +20,14 @@ const ASSETS = [
   './js/ui.js',
   './js/icons.js',
   './js/fullscreen.js',
+  './js/lookup.js',
+  './js/swipe.js',
+  './js/deck.js',
   './js/theme.js',
   './js/wakelock.js',
   './js/content.js',
-  './js/words.js',
   './js/modes/word.js',
   './js/modes/sentences.js',
-  './js/sentences.js',
   './js/modes/standby.js',
   './js/modes/micro.js',
   './js/modes/focus.js',
@@ -33,13 +37,16 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(Promise.all([
+    caches.open(CACHE).then(c => c.addAll(ASSETS)),
+    caches.open(DATA_CACHE).then(c => Promise.all(DATA_FILES.map(f => c.match(f).then(hit => hit || c.add(f))))),
+  ]).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== AUDIO_CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== AUDIO_CACHE && k !== DATA_CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim()));
 });
 
@@ -61,6 +68,13 @@ self.addEventListener('fetch', e => {
     // mp3：缓存优先
     e.respondWith(caches.open(AUDIO_CACHE).then(c => c.match(e.request).then(hit => hit ||
       fetch(e.request).then(res => { if (res.ok) c.put(e.request, res.clone()); return res; }))));
+    return;
+  }
+  if (url.origin === self.location.origin && DATA_FILES.some(f => url.pathname.endsWith(f.slice(1)))) {
+    e.respondWith(caches.open(DATA_CACHE).then(c => c.match(e.request).then(hit => {
+      const net = fetch(e.request).then(res => { if (res.ok) c.put(e.request, res.clone()); return res; });
+      return hit || net;
+    })));
     return;
   }
   e.respondWith(

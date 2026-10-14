@@ -4,7 +4,7 @@ import { SEED_DECK } from './content.js';
 import { newCard } from './srs.js';
 import { initWakeLock } from './wakelock.js';
 import { icon } from './icons.js';
-import { initTheme } from './theme.js';
+import { initTheme, applyTheme } from './theme.js';
 import { initFullscreen } from './fullscreen.js';
 import { initSync } from './sync.js';
 import { initExternalStudy, externalStudyActive } from './external-study.js';
@@ -57,6 +57,12 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+window.addEventListener('wallboard:remote-updated', () => {
+  applyTheme();
+  const name = (location.hash || '#standby').slice(1);
+  if (document.querySelector('dialog[open]')) return;
+  if (name === 'standby' || name === 'word' || name === 'sentences' || !ROUTES[name]) route();
+});
 
 // ---------- 长时间无操作 → 自动进入单词模式（专注进行中不打扰） ----------
 let idleTimer = null;

@@ -1,4 +1,15 @@
 :fullscreen { background: var(--bg); }
+html[data-dim="1"]::after { content: ""; position: fixed; inset: 0; background: rgba(0, 0, 0, .5); pointer-events: none; z-index: 9999; }
+.wm-search { margin-left: auto; width: 11rem; min-height: 2.5rem; padding: 0 .8rem; border: 1px solid var(--line-2); border-radius: .75rem; background: var(--paper); color: var(--ink); }
+.wm-speak.fix { background: rgba(255,255,255,.14); color: #fff; margin-right: .5rem; }
+.lookup-pop { position: fixed; z-index: 200; width: min(18rem, calc(100vw - 1rem)); padding: .8rem 1rem; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--paper); color: var(--ink); box-shadow: var(--shadow-lg); font-size: .9rem; line-height: 1.5; user-select: text; }
+.lk-head { display: flex; align-items: center; gap: .4rem; } .lk-head b { flex: 1; font-size: 1.1rem; }
+.lk-ipa { color: var(--muted); } .lk-en { color: var(--muted); font-size: .82rem; margin-top: .2rem; }
+.deck-list { display: flex; flex-direction: column; gap: .4rem; max-height: 50vh; overflow-y: auto; margin: .75rem 0; }
+.deck-item { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: .6rem; }
+.deck-text { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.deck-text small { color: var(--muted); }
+.resources-open { align-self: center; flex-shrink: 0; }
 .external-dialog { width: min(36rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--paper); color: var(--ink); padding: 1.5rem; }
 .external-dialog::backdrop { background: rgba(0,0,0,.5); }
 .external-dialog h2 { margin-top: 0; }

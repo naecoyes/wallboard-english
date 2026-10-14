@@ -6,7 +6,9 @@ import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
 import { displayStreak, minutesToday } from '../streak.js';
-import { speak, speakSequence, stopSpeak, ttsAvailable, prefetch, prefetchMode, staticAudioReady } from '../tts.js';
+import { lookupFromEvent } from '../lookup.js';
+import { attachSwipe } from '../swipe.js';
+import { speak, regenerateAudio, speakSequence, stopSpeak, ttsAvailable, prefetch, prefetchMode, staticAudioReady } from '../tts.js';
 
 let WORDS = null;
 const say = (text) => ttsAvailable() ? speak(text) : toast('No English voice available');
@@ -45,13 +47,27 @@ export function renderWord(root) {
   let cur = -1;
   let left = autoSec;
   let alive = true;
-  let curExamples = []; // 当前词的例句文本（触摸时预生成）
+  let curExamples = [];
+  const hist = []; // 已看过的词，用于「上一个」 // 当前词的例句文本（触摸时预生成）
 
   // ---------- 头部：进度 + 迷你状态 ----------
   const sub = h('div', { class: 'sub' }, 'Loading IELTS word list…');
   const clockEl = h('span', {});
+  const searchIn = h('input', { type: 'search', class: 'wm-search', placeholder: 'Search word…', autocomplete: 'off', 'aria-label': 'Search word' });
+  searchIn.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key !== 'Enter' || !WORDS) return;
+    const q = searchIn.value.trim().toLowerCase();
+    const i = WORDS.findIndex(x => x.w.toLowerCase() === q);
+    const j = i >= 0 ? i : WORDS.findIndex(x => x.w.toLowerCase().startsWith(q));
+    if (!q || j < 0) return toast('No matching word');
+    stopSpeak(); hist.push(cur); cur = j;
+    update(s => { s.words.idx = cur; });
+    searchIn.value = ''; searchIn.blur(); paint();
+  });
   const head = h('div', { class: 'mode-head' },
     h('div', {}, h('h1', {}, icon('book', 24), 'IELTS Words'), sub),
+    searchIn,
     h('a', { class: 'wm-status', href: '#standby', title: 'Back to Today' },
       h('span', { class: 'chip' }, icon('timer', 14), clockEl),
       h('span', { class: 'chip amber' }, icon('flame', 14), `Streak ${displayStreak()}`),
@@ -72,8 +88,17 @@ export function renderWord(root) {
   function next() {
     if (!WORDS) return;
     stopSpeak();
+    if (cur >= 0) hist.push(cur);
     cur = findIndex(cur + 1);
     update(s => { s.words.idx = cur < 0 ? 0 : cur; });
+    paint();
+  }
+
+  function prev() {
+    if (!WORDS || !hist.length) return toast('This is where you started');
+    stopSpeak();
+    cur = hist.pop();
+    update(s => { s.words.idx = cur; });
     paint();
   }
 
@@ -155,6 +180,7 @@ export function renderWord(root) {
     const hero = h('section', { class: 'wm-hero glass' },
       h('div', { class: 'wm-top' },
         h('button', { type: 'button', class: 'wm-word readable', style: 'font-size:5.25rem', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, w.w),
+        h('button', { class: 'wm-speak fix', 'aria-label': 'Fix pronunciation', title: 'Wrong pronunciation? Regenerate it', onclick: () => regenerateAudio(w.w) }, icon('undo', 22)),
         h('button', { class: 'wm-speak', 'aria-label': 'Read word and example', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, icon('volume', 30))),
       h('div', { class: 'wm-ipa-row' },
         h('span', { class: 'wm-ipa' }, w.ipa),
@@ -162,9 +188,11 @@ export function renderWord(root) {
       tagRow,
       meaningButton,
       h('div', { class: 'wm-spacer' }),
-      h('button', { class: 'wm-next', onclick: next },
-        'Next', icon('arrowRight', 22),
-        autoSec ? h('span', { class: 'wm-auto' }, barFill) : null));
+      h('div', { class: 'sn-nav' },
+        h('button', { class: 'sn-prev', 'aria-label': 'Previous word', onclick: prev }, icon('arrowRight', 22)),
+        h('button', { class: 'wm-next', onclick: next },
+          'Next', icon('arrowRight', 22),
+          autoSec ? h('span', { class: 'wm-auto' }, barFill) : null)));
 
     // ---------- 左下：单词笔记（词形 / 辨析 / 搭配），放在单词卡空白处，挂墙时不用滚动 ----------
     const groups = [];
@@ -197,7 +225,7 @@ export function renderWord(root) {
         }, 'Reveal translation');
         return h('div', { class: 'wm-ex' + (i === 0 ? ' first' : '') },
           h('div', { class: 'wm-ex-main' },
-            h('button', { type: 'button', class: 'wm-en readable', title: 'Read example', onclick: () => say(en) }, highlight(en, w)),
+            h('button', { type: 'button', class: 'wm-en readable', title: 'Read example · tap a word for its meaning', onclick: e => { say(en); lookupFromEvent(e); } }, highlight(en, w)),
             reveal, translation,
             h('div', { class: 'wm-src' }, eid ? `Source: Tatoeba #${eid} · CC BY 2.0 FR` : 'Source: original')),
           h('button', { class: 'icon-btn sm', 'aria-label': 'Read example', onclick: () => say(en) }, icon('volume', 18)));
@@ -274,6 +302,7 @@ export function renderWord(root) {
   };
   const onKey = (e) => { if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); } };
   wrap.addEventListener('pointerdown', onTouch);
+  attachSwipe(body, { left: next, right: prev });
   document.addEventListener('keydown', onKey);
 
   // 按需加载词库

@@ -120,8 +120,13 @@ export async function syncNow() {
       if (data?.mimoKeyEnc && !local.settings.mimoKey) {
         try { local.settings.mimoKey = await decrypt(data.mimoKeyEnc); } catch { /* 口令不一致则忽略 */ }
       }
+      const beforeSnap = JSON.stringify({ ...local, settings: { ...local.settings, mimoKey: '' } });
       const merged = merge(local, data?.state);
+      const afterSnap = JSON.stringify({ ...merged, settings: { ...merged.settings, mimoKey: '' } });
       replaceState(merged, { silent: true });
+      if (beforeSnap !== afterSnap && typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('wallboard:remote-updated'));
+      }
       const body = {
         v: 1, salt: cfg.salt, check: data?.check || await encrypt('ok'),
         state: { ...merged, settings: { ...merged.settings, mimoKey: '' } },

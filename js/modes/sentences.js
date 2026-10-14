@@ -4,6 +4,8 @@
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { AdvanceClock } from '../auto-advance.js';
+import { lookupFromEvent } from '../lookup.js';
+import { attachSwipe } from '../swipe.js';
 import { get, update, addXP } from '../store.js';
 import { addCard } from '../srs.js';
 import { speak, stopSpeak, ttsAvailable, prefetch, staticAudioReady } from '../tts.js';
@@ -142,7 +144,7 @@ export function renderSentences(root) {
       h('div', { class: 'sn-top' },
         h('span', { class: 'sn-scene' }, sceneName),
         h('div', { class: 'wm-pills' }, laterBtn, h('span', { class: 'wm-sep' }), knownBtn)),
-      h('button', { type: 'button', class: 'sn-en readable', style: `font-size:${sizeFor(s.en)}rem`, title: 'Read sentence', onclick: () => say(s.en) }, s.en),
+      h('button', { type: 'button', class: 'sn-en readable', style: `font-size:${sizeFor(s.en)}rem`, title: 'Read sentence · tap a word for its meaning', onclick: e => { say(s.en); lookupFromEvent(e); } }, s.en),
       zh, note,
       h('div', { class: 'sn-actions' },
         h('button', { class: 'sn-pill light', onclick: () => say(s.en) }, icon('volume', 16), 'Listen'),
@@ -186,6 +188,7 @@ export function renderSentences(root) {
     else if (e.key === ' ') { e.preventDefault(); body.querySelector('.sn-actions .sn-pill')?.click(); }
   };
   document.addEventListener('keydown', onKey);
+  attachSwipe(body, { left: () => go(pos + 1), right: () => go(pos - 1) });
   const resetCountdown = () => { advance.reset(performance.now()); updateCountdown(); };
   const onVisibility = () => {
     advance.setVisible(performance.now(), !document.hidden);
