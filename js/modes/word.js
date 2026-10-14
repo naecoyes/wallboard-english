@@ -1,7 +1,7 @@
 // word.js — 单词模式：长时间无操作时的默认屏（环境式背雅思单词）
 // 横屏：左 = 单词 / 音标 / 考试标签 / 释义 / 操作；右 = 例句（含 Tatoeba 出处）/ 单词笔记
 // 词库 words.js 约 1.5MB，进入本页时才按需加载，不拖慢其他页面
-import { h, toast } from '../ui.js';
+import { h, toast, celebrate } from '../ui.js';
 import { icon } from '../icons.js';
 import { get, update } from '../store.js';
 import { addCard } from '../srs.js';
@@ -61,7 +61,7 @@ export function renderWord(root) {
     const i = WORDS.findIndex(x => x.w.toLowerCase() === q);
     const j = i >= 0 ? i : WORDS.findIndex(x => x.w.toLowerCase().startsWith(q));
     if (!q || j < 0) return toast('No matching word');
-    stopSpeak(); hist.push(cur); cur = j;
+    stopSpeak(); hist.push(cur); cur = j; body.dataset.dir = 'jump';
     update(s => { s.words.idx = cur; });
     searchIn.value = ''; searchIn.blur(); paint();
   });
@@ -90,6 +90,7 @@ export function renderWord(root) {
     stopSpeak();
     if (cur >= 0) hist.push(cur);
     cur = findIndex(cur + 1);
+    body.dataset.dir = 'next';
     update(s => { s.words.idx = cur < 0 ? 0 : cur; });
     paint();
   }
@@ -98,6 +99,7 @@ export function renderWord(root) {
     if (!WORDS || !hist.length) return toast('This is where you started');
     stopSpeak();
     cur = hist.pop();
+    body.dataset.dir = 'prev';
     update(s => { s.words.idx = cur; });
     paint();
   }
@@ -144,6 +146,7 @@ export function renderWord(root) {
           s.words.unknown = s.words.unknown.filter(x => x !== w.w);
         });
         toast("Marked as known — it won't show again");
+        celebrate();
         next();
       },
     }, icon('check', 16), 'Too easy');
@@ -157,7 +160,10 @@ export function renderWord(root) {
     const meaningHint = h('span', { class: 'wm-meaning-hint' });
     const meaningButton = h('button', {
       type: 'button', class: 'wm-meaning-flip', 'aria-pressed': 'false',
-      onclick: () => { chineseFace = !chineseFace; paintMeaning(); },
+      onclick: () => {
+        chineseFace = !chineseFace; paintMeaning();
+        meaningContent.classList.remove('flip-in'); void meaningContent.offsetWidth; meaningContent.classList.add('flip-in');
+      },
     }, meaningContent, meaningHint);
     function paintMeaning() {
       meaningContent.replaceChildren();
@@ -181,7 +187,7 @@ export function renderWord(root) {
       h('div', { class: 'wm-top' },
         h('button', { type: 'button', class: 'wm-word readable', style: 'font-size:5.25rem', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, w.w),
         h('button', { class: 'wm-speak fix', 'aria-label': 'Fix pronunciation', title: 'Wrong pronunciation? Regenerate it', onclick: () => regenerateAudio(w.w) }, icon('undo', 22)),
-        h('button', { class: 'wm-speak', 'aria-label': 'Read word and example', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, icon('volume', 30))),
+        h('button', { class: 'wm-speak speak-btn', 'aria-label': 'Read word and example', title: 'Read word, then one example', onclick: () => speakSequence([w.w, w.ex?.[0]?.[0]]) }, icon('volume', 30))),
       h('div', { class: 'wm-ipa-row' },
         h('span', { class: 'wm-ipa' }, w.ipa),
         h('div', { class: 'wm-pills' }, unknownBtn, h('span', { class: 'wm-sep' }), easyBtn)),

@@ -109,6 +109,12 @@ function pickVoice() {
   return ens.find(v => v.lang.replace('_', '-') === 'en-GB') || ens.find(v => v.lang.replace('_', '-') === 'en-US') || ens[0] || null;
 }
 
+/** 朗读状态写到 <html data-speaking>，CSS 用它显示朗读光圈 */
+function setSpeaking(on) {
+  if (on) document.documentElement.dataset.speaking = '1';
+  else delete document.documentElement.dataset.speaking;
+}
+
 function speakSystem(text, rate) {
   return new Promise(resolve => {
     if (!('speechSynthesis' in window)) return resolve(false);
@@ -118,8 +124,9 @@ function speakSystem(text, rate) {
     if (v) u.voice = v;
     u.lang = v ? v.lang : 'en-US';
     u.rate = rate;
-    u.onend = () => resolve(true);
-    u.onerror = () => resolve(false);
+    u.onend = () => { setSpeaking(false); resolve(true); };
+    u.onerror = () => { setSpeaking(false); resolve(false); };
+    setSpeaking(true);
     speechSynthesis.speak(u);
   });
 }
@@ -150,13 +157,15 @@ function playBlob(blob, rate, quiet = false) {
     if (currentUrl) URL.revokeObjectURL(currentUrl);
     currentUrl = URL.createObjectURL(blob);
     finishCurrent = resolve;
-    audio.onended = () => { finishCurrent = null; resolve(true); };
-    audio.onerror = () => { finishCurrent = null; resolve(false); };
+    audio.onended = () => { finishCurrent = null; setSpeaking(false); resolve(true); };
+    audio.onerror = () => { finishCurrent = null; setSpeaking(false); resolve(false); };
+    setSpeaking(true);
     audio.src = currentUrl;
     audio.playbackRate = rate;
     audio.preservesPitch = true;
     audio.play().catch(err => {
       finishCurrent = null;
+      setSpeaking(false);
       if (!quiet && err && err.name === 'NotAllowedError') toast('Autoplay was blocked. Tap the screen and try again.');
       resolve(false);
     });
@@ -394,6 +403,7 @@ export function stopSpeak() {
   if (!audio.paused) audio.pause();
   if (finishCurrent) { finishCurrent(false); finishCurrent = null; }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
+  setSpeaking(false);
 }
 
 /** 单字/单句发音纠错：有 MiMo Key 时重新请求并覆盖缓存；无 Key 时切换为浏览器语音（再点可恢复默认预生成音频） */

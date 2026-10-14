@@ -48,12 +48,21 @@ export function isDimmed(now = new Date()) {
   return h >= 23 || h < 6;
 }
 
+const reduceMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+/** 动画强度：full / subtle / off（auto 时跟随系统「减少动态效果」） */
+export function currentMotion() {
+  const m = get().settings.motion || 'auto';
+  if (m === 'full' || m === 'subtle' || m === 'off') return m;
+  return reduceMq && reduceMq.matches ? 'subtle' : 'full';
+}
+
 let metaSynced = false;
 export function applyTheme() {
   const root = document.documentElement;
   const t = currentTheme();
   const p = currentPalette();
   const dim = isDimmed() ? '1' : '0';
+  const motion = currentMotion();
   const shiftOn = get().settings.pixelShift !== false;
   const appEl = document.getElementById('app');
   if (appEl) {
@@ -67,11 +76,12 @@ export function applyTheme() {
     }
   }
   // 首帧脚本已经设好 theme/palette，但还没同步地址栏颜色，所以第一次调用一定要往下走
-  if (metaSynced && root.dataset.theme === t && root.dataset.palette === p && root.dataset.dim === dim) return;
+  if (metaSynced && root.dataset.theme === t && root.dataset.palette === p && root.dataset.dim === dim && root.dataset.motion === motion) return;
   metaSynced = true;
   root.dataset.theme = t;
   root.dataset.palette = p;
   root.dataset.dim = dim;
+  root.dataset.motion = motion;
   // 浏览器地址栏 / 状态栏颜色跟随当前背景色
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', getComputedStyle(root).getPropertyValue('--bg').trim() || '#f4f3ed');
@@ -80,6 +90,7 @@ export function applyTheme() {
 export function initTheme() {
   applyTheme();
   setInterval(applyTheme, 30 * 1000); // 每 30 秒检查一次是否到点切换
+  if (reduceMq?.addEventListener) reduceMq.addEventListener('change', applyTheme);
   if (mq) (mq.addEventListener ? mq.addEventListener('change', applyTheme) : mq.addListener(applyTheme));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) applyTheme(); });
 }

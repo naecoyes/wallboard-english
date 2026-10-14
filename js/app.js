@@ -61,7 +61,12 @@ window.addEventListener('wallboard:remote-updated', () => {
   applyTheme();
   const name = (location.hash || '#standby').slice(1);
   if (document.querySelector('dialog[open]')) return;
-  if (name === 'standby' || name === 'word' || name === 'sentences' || !ROUTES[name]) route();
+  if (!(name === 'standby' || name === 'word' || name === 'sentences' || !ROUTES[name])) return;
+  // 同步刷新不播放入场动画：渲染时标记 quiet，渲染完把动画直接跳到结束
+  document.documentElement.dataset.quiet = '1';
+  route();
+  screen.getAnimations?.({ subtree: true }).forEach(a => { try { a.finish(); } catch (_) {} });
+  delete document.documentElement.dataset.quiet;
 });
 
 // ---------- 长时间无操作 → 自动进入单词模式（专注进行中不打扰） ----------

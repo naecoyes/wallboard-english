@@ -57,7 +57,9 @@ export async function showLookup(word, x, y) {
     body);
   document.body.append(pop);
   const w = pop.offsetWidth || 280;
-  pop.style.left = `${Math.max(8, Math.min(x - w / 2, innerWidth - w - 8))}px`;
+  const left = Math.max(8, Math.min(x - w / 2, innerWidth - w - 8));
+  pop.style.left = `${left}px`;
+  pop.style.transformOrigin = `${Math.round(x - left)}px top`; // 从点击处弹出
   pop.style.top = `${Math.min(y + 18, innerHeight - pop.offsetHeight - 8)}px`;
   const mine = pop;
 

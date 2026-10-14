@@ -85,7 +85,7 @@ html { font-size: clamp(12px, min(1.39vw, 2vh), 30px); }
   --violet: #7c4dbd;
   --bar: #dce8de;
   --track: #e9ece4;
-  --shadow: 0 .625rem 2rem rgba(32, 57, 47, .065);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 1px 2px rgba(32, 57, 47, .06), 0 .75rem 2rem rgba(32, 57, 47, .07);
   --shadow-lg: 0 1.5rem 5rem rgba(0, 20, 13, .25);
 
   --r-xl: 1.75rem;
@@ -130,7 +130,7 @@ html[data-theme="dark"] {
   --violet: #b99be6;
   --bar: #23312a;
   --track: #222d27;
-  --shadow: 0 .625rem 2rem rgba(0, 0, 0, .35);
+  --shadow: inset 0 1px 0 rgba(255, 255, 255, .04), 0 1px 2px rgba(0, 0, 0, .3), 0 .75rem 2rem rgba(0, 0, 0, .4);
   --shadow-lg: 0 1.5rem 5rem rgba(0, 0, 0, .6);
 }
 
@@ -211,7 +211,7 @@ html[data-palette="graphite"][data-theme="dark"] {
 html, body { margin: 0; height: 100%; }
 body {
   color: var(--ink); font-family: var(--font); font-size: 1rem; line-height: 1.45;
-  background: radial-gradient(circle at 7% 0%, var(--bg-glow) 0, transparent 30%), var(--bg);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
   user-select: none; -webkit-user-select: none; overflow: hidden;
   transition: background-color .6s ease, color .6s ease;
@@ -765,6 +765,156 @@ html { background: var(--bg); }
 html:fullscreen, html:-webkit-full-screen { width: 100%; height: 100%; margin: 0; padding: 0; background: var(--bg); }
 html::backdrop { background: var(--bg); }
 body, #app { width: 100%; }
+/* ==========================================================
+   动效与质感：纸张颗粒、环境光晕、主卡高光、切换方向、朗读光圈
+   只改 transform / opacity / filter，不触发重新布局
+   html[data-motion]：full（默认）/ subtle（只保留淡入）/ off
+   ========================================================== */
+:root { --spring: cubic-bezier(.34, 1.56, .64, 1); --ease-out: cubic-bezier(.16, 1, .3, 1); }
+#app { position: relative; z-index: 1; }
+/* 纸张颗粒：静态噪点，普通透明叠加（不用混合模式，省 GPU） */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: .035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); background-size: 180px 180px;
+}
+html[data-theme="dark"] body::before { opacity: .05; filter: invert(1); }
+/* 环境光晕：两团柔光缓慢漂移 */
+body::after {
+  content: ""; position: fixed; inset: -20%; z-index: 0; pointer-events: none; will-change: transform;
+  background:
+    radial-gradient(28% 32% at 18% 12%, var(--bg-glow), transparent 70%),
+    radial-gradient(24% 28% at 86% 88%, var(--bg-glow), transparent 70%);
+  animation: glow-drift 60s ease-in-out infinite alternate;
+}
+@keyframes glow-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+
+/* 主卡：左上高光 + 底部压暗 + 内高光 + 双层投影（六套配色通用） */
+.ec-hero, .wm-hero {
+  background-image:
+    radial-gradient(120% 90% at 0% 0%, rgba(255, 255, 255, .13), transparent 55%),
+    linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, .13));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 2px 4px rgba(0, 0, 0, .08), 0 1.25rem 3rem -1rem rgba(0, 0, 0, .35);
+}
+.ec-hero::after, .wm-hero::after { animation: ring-breathe 18s ease-in-out infinite alternate; }
+@keyframes ring-breathe {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: .85; }
+  to { transform: translate3d(-1.5rem, -1rem, 0) scale(1.08); opacity: 1; }
+}
+html[data-theme="dark"] .glass, html[data-theme="dark"] .ec-card { border-top-color: rgba(255, 255, 255, .08); }
+
+/* 按下回弹 */
+.btn, .wm-pill, .sn-pill, .sn-chip, .task, .choice, .resource-link, .sn-prev, .icon-btn, .nav-icon, .seg a, .wm-speak, .grade, .palette {
+  transition: transform .4s var(--spring), background-color .2s, border-color .2s, color .2s, box-shadow .2s, opacity .2s;
+}
+.btn:active, .wm-pill:active, .sn-pill:active, .sn-chip:active, .task:active, .choice:active, .resource-link:active,
+.sn-prev:active, .icon-btn:active, .nav-icon:active, .seg a:active, .wm-speak:active, .grade:active, .palette:active {
+  transform: scale(.95); transition-duration: .08s;
+}
+.wm-next { transition: transform .4s var(--spring); }
+.wm-next:active { transform: scale(.98); transition-duration: .08s; }
+
+/* 入场：卡片错峰 */
+.ec-col > *, .stats-grid > *, .wm-body > *, .learning-resources { animation: rise .5s var(--ease-out) both; }
+.ec-col > :nth-child(2), .stats-grid > :nth-child(2), .wm-body > :nth-child(2) { animation-delay: .06s; }
+.ec-col > :nth-child(3) { animation-delay: .12s; }
+.ec-col > :nth-child(4) { animation-delay: .18s; }
+aside.ec-col > :nth-child(1) { animation-delay: .04s; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* 换词 / 换句：有方向的滑入 */
+.wm-body[data-dir="next"] > * { animation: slide-next .45s var(--ease-out) both; }
+.wm-body[data-dir="prev"] > * { animation: slide-prev .45s var(--ease-out) both; }
+.wm-body[data-dir="jump"] > * { animation: zoom-in .4s var(--ease-out) both; }
+.wm-body[data-dir] > :nth-child(2) { animation-delay: .05s; }
+@keyframes slide-next { from { opacity: 0; transform: translate3d(1.75rem, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes slide-prev { from { opacity: 0; transform: translate3d(-1.75rem, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes zoom-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+/* 单词大字 / 句子大字：从下往上揭示 */
+.wm-word, .sn-en { animation: text-reveal .6s var(--ease-out) .08s backwards; }
+@keyframes text-reveal {
+  from { opacity: 0; transform: translate3d(0, .35em, 0); clip-path: inset(0 0 100% 0); }
+  to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+/* 揭晓中文 / 释义翻面 */
+.reveal-hidden { opacity: .55; }
+.phrase-cn, .sn-zh { transition: filter .45s var(--ease-out), opacity .45s var(--ease-out); }
+.wm-cn:not([hidden]) { animation: rise .3s var(--ease-out) both; }
+.wm-meaning-content.flip-in { animation: flip-in .32s var(--ease-out) both; transform-origin: 50% 0; }
+@keyframes flip-in { from { opacity: 0; transform: perspective(40rem) rotateX(-12deg); } to { opacity: 1; transform: none; } }
+
+/* 朗读光圈 */
+.speak-btn { position: relative; }
+.speak-btn::after {
+  content: ""; position: absolute; inset: -3px; border-radius: inherit; border: 2px solid currentColor;
+  opacity: 0; pointer-events: none;
+}
+.wm-speak.speak-btn::after { border-color: #fffefa; }
+html[data-speaking="1"] .speak-btn::after { animation: ping 1.3s var(--ease-out) infinite; }
+@keyframes ping { from { opacity: .7; transform: scale(1); } to { opacity: 0; transform: scale(1.35); } }
+
+/* 标记会了：中央对勾 */
+.celebrate {
+  position: fixed; left: 50%; top: 50%; z-index: 120; width: 5.5rem; height: 5.5rem; margin: -2.75rem 0 0 -2.75rem;
+  display: grid; place-items: center; border-radius: 50%; pointer-events: none;
+  background: var(--green); color: var(--on-green); box-shadow: 0 1rem 3rem rgba(0, 0, 0, .25);
+  animation: celebrate .8s var(--ease-out) forwards;
+}
+.celebrate svg { width: 2.75rem; height: 2.75rem; stroke-dasharray: 30; stroke-dashoffset: 30; animation: draw .35s .1s var(--ease-out) forwards; }
+@keyframes celebrate {
+  0% { opacity: 0; transform: scale(.5); } 30% { opacity: 1; transform: scale(1.05); }
+  70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.1); }
+}
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* Today：柱状图生长、进度条展开 */
+.bar { transform-origin: 50% 100%; animation: bar-grow .7s var(--ease-out) both; }
+.day-col:nth-child(2) .bar { animation-delay: .04s; } .day-col:nth-child(3) .bar { animation-delay: .08s; }
+.day-col:nth-child(4) .bar { animation-delay: .12s; } .day-col:nth-child(5) .bar { animation-delay: .16s; }
+.day-col:nth-child(6) .bar { animation-delay: .2s; } .day-col:nth-child(7) .bar { animation-delay: .24s; }
+@keyframes bar-grow { from { transform: scaleY(0); } to { transform: none; } }
+.progress-fill { transform-origin: 0 50%; animation: fill-grow .9s var(--ease-out) .15s both; }
+@keyframes fill-grow { from { transform: scaleX(0); } to { transform: none; } }
+
+/* 自动切换进度条：流动高光 */
+.wm-auto > i { position: relative; overflow: hidden; }
+.wm-auto > i::after {
+  content: ""; position: absolute; inset: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .6), transparent);
+  animation: shimmer 2.4s linear infinite;
+}
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+
+/* 弹窗 / 查词气泡 */
+dialog[open] { animation: dialog-in .3s var(--ease-out) both; }
+dialog[open]::backdrop { animation: fade .3s ease both; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(.75rem) scale(.97); } to { opacity: 1; transform: none; } }
+.lookup-pop { animation: pop-in .25s var(--spring) both; }
+@keyframes pop-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+
+/* 深夜极暗：停掉环境动画 */
+html[data-dim="1"] body::after, html[data-dim="1"] .ec-hero::after, html[data-dim="1"] .wm-hero::after,
+html[data-dim="1"] .wm-auto > i::after { animation-play-state: paused; }
+
+/* subtle：只保留淡入，去掉漂移、滑动、回弹和揭示 */
+html[data-motion="subtle"] body::after, html[data-motion="subtle"] .ec-hero::after, html[data-motion="subtle"] .wm-hero::after,
+html[data-motion="subtle"] .wm-auto > i::after, html[data-motion="subtle"] .speak-btn::after { animation: none; }
+html[data-motion="subtle"] .ec-col > *, html[data-motion="subtle"] .stats-grid > *, html[data-motion="subtle"] .wm-body > *,
+html[data-motion="subtle"] .wm-word, html[data-motion="subtle"] .sn-en, html[data-motion="subtle"] #screen > *,
+html[data-motion="subtle"] .wm-card, html[data-motion="subtle"] .task-card, html[data-motion="subtle"] dialog[open],
+html[data-motion="subtle"] .lookup-pop, html[data-motion="subtle"] .wm-meaning-content.flip-in { animation: fade .3s ease both; }
+html[data-motion="subtle"] .bar, html[data-motion="subtle"] .progress-fill { animation: none; }
+html[data-motion="subtle"] .btn, html[data-motion="subtle"] .wm-next { transition-timing-function: ease; }
+/* off：全部关闭 */
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after,
+html[data-motion="off"] ::backdrop { animation: none !important; transition: none !important; }
+
+/* 窄屏手机：顶栏按钮换行，避免横向溢出 */
+@media (max-width: 640px) { #topbar, .nav-wrap, .seg { flex-wrap: wrap; } }
+
+/* 兜底：脚本还没设置 data-motion 时，遵循系统「减少动态效果」 */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  html:not([data-motion]) *, html:not([data-motion]) *::before, html:not([data-motion]) *::after { animation: none !important; transition: none !important; }
 }

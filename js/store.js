@@ -18,6 +18,7 @@ const defaults = () => ({
     dayEnd: 19,        // 白天模式结束（时）
     nightDim: 'auto',  // 深夜极暗模式：auto（23:00-06:00）/ on 始终开启 / off 关闭
     pixelShift: true,  // 防烧屏像素微移（每分钟轻微偏移 1-2px）
+    motion: 'auto',    // 动画：auto（系统减少动态效果时用 subtle）/ full / subtle / off
     ttsProvider: 'mimo', // mimo 小米 MiMo（有 Key 时）/ system 系统语音
     mimoVoice: 'Dean', // 默认男声
     mimoKey: '',       // 只存在本机，导出备份时会被去掉

@@ -1,7 +1,7 @@
 // sentences.js — 日常用句模式：按生活场景浏览 1200+ 条常用句子
 // 左：绿色句子卡（英文大字 + 点击揭晓中文 + 朗读 / 慢速 + 会了 / 稍后复习）；右：当前场景的句子列表
 // 句库约 150 KB，进入本页时才按需加载
-import { h, toast } from '../ui.js';
+import { h, toast, celebrate } from '../ui.js';
 import { icon } from '../icons.js';
 import { AdvanceClock } from '../auto-advance.js';
 import { lookupFromEvent } from '../lookup.js';
@@ -80,6 +80,7 @@ export function renderSentences(root) {
     update(s => { s.sentences.scene = id; });
     setList();
     paintChips();
+    body.dataset.dir = 'jump';
     paint(true);
   }
 
@@ -88,6 +89,7 @@ export function renderSentences(root) {
   function go(n, auto = true) {
     if (!list.length) return;
     stopSpeak();
+    body.dataset.dir = n === pos + 1 ? 'next' : n === pos - 1 ? 'prev' : 'jump';
     pos = (n + list.length) % list.length;
     save();
     paint(auto);
@@ -128,7 +130,7 @@ export function renderSentences(root) {
         update(st => {
           st.sentences.known = was ? st.sentences.known.filter(x => x !== s.id) : [...st.sentences.known, s.id];
         });
-        if (!was) { addXP(1); toast('Marked as known'); }
+        if (!was) { addXP(1); toast('Marked as known'); celebrate(); }
         paintChips();
         if (!was) go(pos + 1); else paint(false);
       },
@@ -147,7 +149,7 @@ export function renderSentences(root) {
       h('button', { type: 'button', class: 'sn-en readable', style: `font-size:${sizeFor(s.en)}rem`, title: 'Read sentence · tap a word for its meaning', onclick: e => { say(s.en); lookupFromEvent(e); } }, s.en),
       zh, note,
       h('div', { class: 'sn-actions' },
-        h('button', { class: 'sn-pill light', onclick: () => say(s.en) }, icon('volume', 16), 'Listen'),
+        h('button', { class: 'sn-pill light speak-btn', onclick: () => say(s.en) }, icon('volume', 16), 'Listen'),
         h('button', { class: 'sn-pill', onclick: () => say(s.en, { rate: 0.7 }) }, icon('gauge', 16), 'Slow'),
         revealBtn),
       h('div', { class: 'sn-src' }, s.src ? `Source: Tatoeba #${s.src} · CC BY 2.0 FR` : 'Source: original'),

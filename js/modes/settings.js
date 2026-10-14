@@ -238,6 +238,15 @@ export function renderSettings(root) {
     toast('Screen protection saved');
   });
 
+  const motionSel = h('select', {},
+    ...[['auto', 'Auto'], ['full', 'Full'], ['subtle', 'Subtle'], ['off', 'Off']].map(([v, t]) =>
+      h('option', { value: v, ...((s.settings.motion || 'auto') === v ? { selected: '' } : {}) }, t)));
+  motionSel.addEventListener('change', () => {
+    update(st => { st.settings.motion = motionSel.value; });
+    applyTheme();
+    toast('Animations saved');
+  });
+
   const displayGroup = group('Display',
     h('div', { class: 'row stack' },
       h('div', { class: 'row-top' },
@@ -248,7 +257,8 @@ export function renderSettings(root) {
     row('timer', 'c-sky', 'Daytime hours', 'In Auto mode, the day palette is used between these hours',
       hourSel('dayStart', 5, 10), h('span', { class: 'setting-dash' }, 'to'), hourSel('dayEnd', 16, 22)),
     row('moon', 'c-indigo', 'Late-night dim', 'Lowers brightness and contrast late at night for wall-mounted display', dimSel),
-    row('repeat', 'c-green', 'Burn-in pixel shift', 'Subtly shifts the layout by 1–2 px every minute to protect the screen', shiftSel));
+    row('repeat', 'c-green', 'Burn-in pixel shift', 'Subtly shifts the layout by 1–2 px every minute to protect the screen', shiftSel),
+    row('sparkle', 'c-sky', 'Animations', 'Auto follows the system "reduce motion" setting. Subtle keeps only fades', motionSel));
 
   const learnGroup = group('Study',
     row('target', 'c-green', 'Daily goal', 'Minutes per day, 5–120', goalInput),
