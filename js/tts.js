@@ -4,7 +4,7 @@
 // MiMo 接口：POST https://api.xiaomimimo.com/v1/chat/completions（OpenAI 兼容，允许浏览器跨域调用）
 //   要合成的文本放在 role=assistant 的消息里，返回 choices[0].message.audio.data（base64 mp3）
 // 同一段文本只请求一次：结果存在 IndexedDB，挂墙反复播放不重复计费。
-import { get } from './store.js';
+import { get, update } from './store.js';
 import { toast } from './ui.js';
 
 export const MIMO_MODEL = 'mimo-v2.5-tts';
@@ -52,21 +52,24 @@ export function textId(text) {
   return h.toString(16).padStart(16, '0');
 }
 
-const OVERRIDES_KEY = 'wallboard-tts-overrides-v1';
-let overrides = {};
-try { overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') || {}; } catch {}
-function saveOverrides() {
-  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides)); } catch {}
-}
+// 发音纠错记录在 state.audioOverrides 里，会随 GitHub 同步；旧版本存在单独的 localStorage 键，首次运行时迁移
+const OLD_OVERRIDES_KEY = 'wallboard-tts-overrides-v1';
+try {
+  const old = JSON.parse(localStorage.getItem(OLD_OVERRIDES_KEY) || 'null');
+  if (old && typeof old === 'object') { update(s => { s.audioOverrides = { ...old, ...s.audioOverrides }; }); localStorage.removeItem(OLD_OVERRIDES_KEY); }
+} catch {}
+const overrides = () => get().audioOverrides || {};
+const setOverride = (norm, v) => update(s => { if (v) s.audioOverrides[norm] = v; else delete s.audioOverrides[norm]; });
+
 export function hasAudioOverride(text) {
-  return !!overrides[(text || '').trim().toLowerCase()];
+  return !!overrides()[(text || '').trim().toLowerCase()];
 }
 
 /** 这段文本有预生成的文件、且音色与当前设置一致（或没在用 MiMo）时，返回文件地址 */
 function staticUrl(text) {
   if (!staticIdx) return null;
   const t = (text || '').trim();
-  if (overrides[t.toLowerCase()]) return null; // 用户手动标记了重生成或改用系统语音
+  if (overrides()[t.toLowerCase()]) return null; // 用户手动标记了重生成或改用系统语音
   const s = get().settings;
   if (s.ttsProvider === 'system') return null;
   const cfg = mimoConfig();
@@ -347,10 +350,10 @@ export async function speak(text, { rate, auto = false } = {}) {
   const my = ++seq;
   const r = rate ?? get().settings.rate ?? 0.95;
   const norm = (text || '').trim().toLowerCase();
-  if (overrides[norm] === 'system') {
+  if (overrides()[norm] === 'system') {
     return speakSystem(text, r);
   }
-  if (overrides[norm] === 'mimo') {
+  if (overrides()[norm] === 'mimo') {
     const oKey = `override|${norm}`;
     const hit = mem.get(oKey) || await cacheGet(oKey);
     if (hit) {
@@ -423,8 +426,7 @@ export async function regenerateAudio(text) {
       cachePut(cKey, blob);
       remember(oKey, blob);
       remember(cKey, blob);
-      overrides[norm] = 'mimo';
-      saveOverrides();
+      setOverride(norm, 'mimo');
       setLoading(false);
       toast(`Re-generated "${t}" audio`);
       return await playBlob(blob, get().settings.rate ?? 0.95, false);
@@ -432,14 +434,12 @@ export async function regenerateAudio(text) {
       setLoading(false);
     }
   }
-  if (overrides[norm] === 'system') {
-    delete overrides[norm];
-    saveOverrides();
+  if (overrides()[norm] === 'system') {
+    setOverride(norm, null);
     toast(`Restored built-in audio for "${t}"`);
     return speak(t);
   }
-  overrides[norm] = 'system';
-  saveOverrides();
+  setOverride(norm, 'system');
   toast(`Switched "${t}" to browser voice (tap again to restore)`);
   return speakSystem(t, get().settings.rate ?? 0.95);
 }

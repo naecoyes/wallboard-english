@@ -1,5 +1,5 @@
 import { h, toast } from './ui.js';
-import { get, update } from './store.js';
+import { get, update, compactSessions } from './store.js';
 import { pauseStudyTimer, formatStudyTime } from './study-timer.js';
 
 const KEY = 'wallboard-external-v1';
@@ -31,7 +31,7 @@ function finish(seconds) {
       timerId: id, date: new Date(p.startedAt).toISOString(), mode: 'external',
       seconds, minutes: seconds / 60, result: p.title, resourceUrl: p.url,
     });
-    if (s.sessions.length > 400) s.sessions = s.sessions.slice(-400);
+    s.sessions = compactSessions(s.sessions);
   });
   pending = null; persist(); closeDialog(); pauseStudyTimer(false);
   window.dispatchEvent(new Event('hashchange'));

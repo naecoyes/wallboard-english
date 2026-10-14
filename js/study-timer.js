@@ -1,5 +1,5 @@
 // One monotonic clock for every study screen. No minimum-minute rounding.
-import { get, update } from './store.js';
+import { get, update, compactSessions } from './store.js';
 import { studyDay } from './streak.js';
 
 export class ActiveClock {
@@ -45,7 +45,7 @@ function flush() {
       rec.seconds = Math.floor(ms / 1000);
       rec.minutes = rec.seconds / 60;
     }
-    if (s.sessions.length > 400) s.sessions = s.sessions.slice(-400);
+    s.sessions = compactSessions(s.sessions);
   });
 }
 export function startStudyTimer(mode) {

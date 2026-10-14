@@ -2,7 +2,7 @@
 // · 仓库里只有一个 progress.json；GitHub Token 用口令加密（PBKDF2 → AES-GCM）后存在本机
 // · 口令派生出的密钥以「不可导出」形式存进 IndexedDB，本机重启后自动解锁；Token 明文只在内存里
 // · MiMo Key 也用同一把密钥加密后放进 progress.json，多台设备共用
-import { get, replaceState, onSave } from './store.js';
+import { get, replaceState, onSave, compactSessions } from './store.js';
 
 const CFG = 'wallboard-sync-v1';
 const FILE = 'progress.json';
@@ -71,45 +71,34 @@ async function writeRemote(data, sha) {
   return gh(FILE, { method: 'PUT', body: JSON.stringify({ message: 'sync progress', content, ...(sha ? { sha } : {}) }) });
 }
 
-// ---------- 合并（两边都不会丢数据） ----------
-const uniq = (a, b) => [...new Set([...(a || []), ...(b || [])])];
-export function merge(local, remote) {
-  if (!remote) return local;
-  const out = JSON.parse(JSON.stringify(local));
-  const newer = (remote.settingsAt || 0) > (local.settingsAt || 0);
-  if (newer) { out.settings = { ...local.settings, ...remote.settings, mimoKey: local.settings.mimoKey }; out.sentences.scene = remote.sentences?.scene || out.sentences.scene; out.sentences.pos = { ...out.sentences.pos, ...(remote.sentences?.pos || {}) }; }
-  // 进度：取较大值
-  const lp = local.profile, rp = remote.profile || {};
-  out.profile.xp = Math.max(lp.xp, rp.xp || 0);
-  out.profile.level = Math.floor(out.profile.xp / 100) + 1;
-  out.profile.bestStreak = Math.max(lp.bestStreak, rp.bestStreak || 0);
-  if ((rp.lastCheckIn || '') > (lp.lastCheckIn || '')) { out.profile.lastCheckIn = rp.lastCheckIn; out.profile.streak = rp.streak; }
-  // 已掌握 / 学习中：并集（掌握优先）
-  const known = uniq(local.words.known, remote.words?.known);
-  out.words.known = known;
-  out.words.unknown = uniq(local.words.unknown, remote.words?.unknown).filter(w => !known.includes(w));
-  if (newer && remote.words) out.words.idx = remote.words.idx;
-  out.sentences.known = uniq(local.sentences.known, remote.sentences?.known);
-  // 复习卡：按 front 合并，复习次数多的为准
-  const cards = new Map(local.cards.map(c => [c.front, c]));
-  for (const c of remote.cards || []) {
-    const mine = cards.get(c.front);
-    if (!mine || (c.reps + c.lapses) > (mine.reps + mine.lapses)) cards.set(c.front, c);
-  }
-  out.cards = [...cards.values()];
-  // 学习记录：同一条取秒数较大的
+// ---------- 合并（单用户：哪边最近改过就以哪边为准，学习记录两边合并不丢） ----------
+// base = 本机上次同步成功时云端的 updatedAt；没有 base 说明本机从没同步过，直接采用云端数据
+const secondsOf = (r) => (Number.isFinite(r.seconds) ? r.seconds : (r.minutes || 0) * 60);
+function mergeSessions(a = [], b = []) {
   const ses = new Map();
-  for (const s of [...local.sessions, ...(remote.sessions || [])]) {
-    const id = s.timerId || `${s.date}|${s.mode}`;
+  for (const r of [...a, ...b]) {
+    const id = r.timerId || `${r.date}|${r.mode}`;
     const old = ses.get(id);
-    if (!old || (s.seconds ?? s.minutes * 60) > (old.seconds ?? old.minutes * 60)) ses.set(id, s);
+    if (!old || secondsOf(r) > secondsOf(old)) ses.set(id, r);
   }
-  out.sessions = [...ses.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-400);
-  out.settingsAt = Math.max(local.settingsAt || 0, remote.settingsAt || 0);
+  return compactSessions([...ses.values()]);
+}
+export function merge(local, remote, base = null) {
+  if (!remote) return local;
+  const remoteChanged = base == null || (remote.updatedAt || 0) > base;
+  const localDirty = base != null && (local.updatedAt || 0) > base;
+  const takeRemote = remoteChanged && (!localDirty || (remote.updatedAt || 0) > (local.updatedAt || 0));
+  const out = JSON.parse(JSON.stringify(takeRemote ? remote : local));
+  out.settings = { ...out.settings, mimoKey: local.settings.mimoKey };
+  out.sessions = mergeSessions(local.sessions, remote.sessions);
+  out.seeded = true;
+  out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
 
 // ---------- 同步 ----------
+const strip = (st) => ({ ...st, settings: { ...st.settings, mimoKey: '' } });
+const saveCfg = () => localStorage.setItem(CFG, JSON.stringify(cfg));
 export async function syncNow() {
   if (!token || busy) return;
   busy = true; setState('syncing');
@@ -120,27 +109,29 @@ export async function syncNow() {
       if (data?.mimoKeyEnc && !local.settings.mimoKey) {
         try { local.settings.mimoKey = await decrypt(data.mimoKeyEnc); } catch { /* 口令不一致则忽略 */ }
       }
-      const beforeSnap = JSON.stringify({ ...local, settings: { ...local.settings, mimoKey: '' } });
-      const merged = merge(local, data?.state);
-      const afterSnap = JSON.stringify({ ...merged, settings: { ...merged.settings, mimoKey: '' } });
+      const merged = merge(local, data?.state, cfg.base ?? null);
+      const changed = !data || JSON.stringify(data.state) !== JSON.stringify(strip(merged));
+      if (changed) merged.updatedAt = Math.max(Date.now(), merged.updatedAt); // 写回云端的版本比两边都新
+      const localChanged = JSON.stringify(strip(local)) !== JSON.stringify(strip(merged));
       replaceState(merged, { silent: true });
-      if (beforeSnap !== afterSnap && typeof window !== 'undefined' && window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('wallboard:remote-updated'));
+      if (localChanged) window.dispatchEvent(new CustomEvent('wallboard:remote-updated'));
+      if (changed) {
+        const body = {
+          v: 2, salt: cfg.salt, check: data?.check || await encrypt('ok'), state: strip(merged),
+          ...(merged.settings.mimoKey ? { mimoKeyEnc: await encrypt(merged.settings.mimoKey) } : {}),
+        };
+        try { await writeRemote(body, sha); } catch (e) { if ((e.status !== 409 && e.status !== 422) || attempt) throw e; continue; }
       }
-      const body = {
-        v: 1, salt: cfg.salt, check: data?.check || await encrypt('ok'),
-        state: { ...merged, settings: { ...merged.settings, mimoKey: '' } },
-        ...(merged.settings.mimoKey ? { mimoKeyEnc: await encrypt(merged.settings.mimoKey) } : {}),
-      };
-      if (data && JSON.stringify(data.state) === JSON.stringify(body.state)) break; // 没有变化
-      try { await writeRemote(body, sha); break; } catch (e) { if (e.status !== 409 && e.status !== 422 || attempt) throw e; }
+      cfg.base = merged.updatedAt; saveCfg();
+      break;
     }
     syncState.last = Date.now(); setState('ok');
   } catch (e) {
     setState('error', e.status === 401 ? 'Token invalid or expired' : e.status === 403 ? 'Rate-limited or no permission' : e.message === 'Failed to fetch' ? 'Offline' : e.message);
   } finally { busy = false; }
 }
-const schedule = () => { clearTimeout(timer); if (token) timer = setTimeout(syncNow, 15000); };
+// 有改动后最多 60 秒上传一次（正在学习时也会按时上传，不会因为一直有改动而无限推迟）
+const schedule = () => { if (token && !timer) timer = setTimeout(() => { timer = null; syncNow(); }, 60000); };
 
 // ---------- 对外接口 ----------
 export async function connect({ repo, tokenText, pass }) {
@@ -153,7 +144,7 @@ export async function connect({ repo, tokenText, pass }) {
   key = await derive(pass, salt);
   if (remote.data?.check) { try { await decrypt(remote.data.check); } catch { cfg = null; token = null; key = null; throw new Error('Wrong passphrase for the existing data'); } }
   cfg = { repo, salt: b64.enc(salt), tokenEnc: await encrypt(token) };
-  localStorage.setItem(CFG, JSON.stringify(cfg));
+  saveCfg();
   await keyStore('put', key);
   await syncNow();
 }
@@ -164,7 +155,7 @@ export async function unlock(pass) {
   syncNow();
 }
 export async function disconnect() {
-  localStorage.removeItem(CFG); await keyStore('del'); cfg = null; key = null; token = null; clearTimeout(timer); setState('off');
+  localStorage.removeItem(CFG); await keyStore('del'); cfg = null; key = null; token = null; clearTimeout(timer); timer = null; setState('off');
 }
 export const syncRepo = () => cfg?.repo || '';
 
@@ -173,7 +164,7 @@ export async function initSync() {
   key = await keyStore('get');
   if (!key) return setState('locked');
   try { token = await decrypt(cfg.tokenEnc); } catch { key = null; return setState('locked'); }
-  document.addEventListener('visibilitychange', () => syncNow());
+  document.addEventListener('visibilitychange', () => syncNow()); // 切后台 / 回到前台时立刻同步
   syncNow();
 }
 // 解锁 / 连接后也要监听保存

@@ -28,6 +28,8 @@ const defaults = () => ({
   },
   words: { idx: 0, known: [], unknown: [] }, // 单词模式进度：当前位置 / 太简单 / 不认识
   sentences: { scene: 'all', pos: {}, known: [] }, // 日常用句：当前场景 / 各场景位置 / 已掌握的句子 id
+  audioOverrides: {}, // 发音纠错：单词 → 'mimo'（已重生成）/ 'system'（改用浏览器语音）
+  updatedAt: 0,       // 最近一次内容变化的时间，同步时判断哪边更新
   seeded: false,
 });
 
@@ -59,10 +61,41 @@ function migrate(data) {
   if (!out.sentences.pos || typeof out.sentences.pos !== 'object') out.sentences.pos = {};
   out.cards = Array.isArray(data.cards) ? data.cards : [];
   out.sessions = Array.isArray(data.sessions) ? data.sessions : [];
+  out.audioOverrides = data.audioOverrides && typeof data.audioOverrides === 'object' ? { ...data.audioOverrides } : {};
   return out;
 }
 
 export function get() { return state; }
+
+// ---------- 学习记录：全部保留；90 天前的按「天 + 模式」合并成一条，文件不会无限变大 ----------
+const KEEP_DAYS = 90;
+/** 学习日（凌晨 4 点前算前一天），与 streak.js 的 studyDay 一致 */
+function dayOf(d) {
+  const x = new Date(d.getTime() - 4 * 3600e3);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+const secondsOf = (r) => (Number.isFinite(r.seconds) ? r.seconds : (r.minutes || 0) * 60);
+
+export function compactSessions(list, now = Date.now()) {
+  const cutoff = dayOf(new Date(now - KEEP_DAYS * 864e5));
+  const keep = [], groups = new Map();
+  for (const r of list) {
+    const day = r.studyDay || dayOf(new Date(r.date));
+    if (day >= cutoff) { keep.push(r); continue; }
+    const id = `agg:${day}:${r.mode}`;
+    const g = groups.get(id) || { day, mode: r.mode, aggSec: 0, aggCount: 0, rawSec: 0, rawCount: 0 };
+    if (r.timerId === id) { g.aggSec = Math.max(g.aggSec, secondsOf(r)); g.aggCount = Math.max(g.aggCount, r.count || 0); }
+    else { g.rawSec += secondsOf(r); g.rawCount += 1; }
+    groups.set(id, g);
+  }
+  // 同一天已合并过、另一台设备又带来原始记录时取较大值，不会重复累加
+  for (const [id, g] of groups) {
+    const seconds = Math.round(Math.max(g.aggSec, g.rawSec));
+    const count = Math.max(g.aggCount, g.rawCount);
+    keep.push({ timerId: id, studyDay: g.day, date: `${g.day}T12:00:00.000Z`, mode: g.mode, seconds, minutes: seconds / 60, count, result: `${count} sessions` });
+  }
+  return keep.sort((a, b) => a.date.localeCompare(b.date));
+}
 
 const saveHooks = [];
 export const onSave = (fn) => saveHooks.push(fn);
@@ -74,8 +107,20 @@ function touchSettings() {
   if (snap !== settingsSnap) { settingsSnap = snap; state.settingsAt = Date.now(); }
 }
 
+let contentSnap = JSON.stringify({ ...state, updatedAt: 0 });
+/** 内容真的变了才更新 updatedAt（避免计时器每 5 秒保存一次就触发同步） */
+function touchContent() {
+  const snap = JSON.stringify({ ...state, updatedAt: 0 });
+  if (snap === contentSnap) return false;
+  contentSnap = snap;
+  state.updatedAt = Date.now();
+  return true;
+}
+
 export function save(silent = false) {
   touchSettings();
+  const changed = touchContent();
+  if (!changed && !silent) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); }
   catch (e) { console.warn('Save failed', e); }
   if (!silent) saveHooks.forEach(f => f());
@@ -85,7 +130,9 @@ export function save(silent = false) {
 export function replaceState(next, { silent = false } = {}) {
   state = migrate(next);
   settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
-  save(silent);
+  contentSnap = JSON.stringify({ ...state, updatedAt: 0 }); // 同步写入不算本机改动
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('Save failed', e); }
+  if (!silent) saveHooks.forEach(f => f());
 }
 
 export function update(fn) { fn(state); save(); }
@@ -102,8 +149,7 @@ export function addXP(amount) {
 export function logSession(mode, minutes, result) {
   update(s => {
     s.sessions.push({ date: new Date().toISOString(), mode, minutes, result });
-    // 只保留最近 400 条，防止无限膨胀
-    if (s.sessions.length > 400) s.sessions = s.sessions.slice(-400);
+    s.sessions = compactSessions(s.sessions);
   });
 }
 
