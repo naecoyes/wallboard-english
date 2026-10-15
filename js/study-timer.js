@@ -18,7 +18,7 @@ export class ActiveClock {
   pause(now, paused) { this.sample(now); this.paused = paused; if (!paused) this.activity = now; }
 }
 
-const MODES = new Set(['micro', 'focus', 'word', 'sentences', 'reading']);
+const MODES = new Set(['standby', 'micro', 'focus', 'word', 'sentences', 'reading', 'settings']);
 let current = null;
 const now = () => performance.now();
 export const formatStudyTime = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -52,7 +52,7 @@ export function startStudyTimer(mode) {
   flush();
   current = MODES.has(mode) ? {
     mode, id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    clock: new ActiveClock(now(), !document.hidden), buckets: new Map(),
+    clock: new ActiveClock(now(), !document.hidden, Infinity), buckets: new Map(),
   } : null;
 }
 export function studySeconds() { sample(); return current ? current.clock.total / 1000 : 0; }
