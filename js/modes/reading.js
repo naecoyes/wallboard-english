@@ -306,11 +306,24 @@ export function renderReading(root) {
     // ---------- 右：词汇表 + 来源 ----------
     const pageWords = paragraphVocabulary(text, READING_DICTIONARY);
     const gloss = pageWords.length
-      ? h('div', { class: 'rd-gloss' }, ...pageWords.map(([term, pos_, def]) =>
-        h('button', {
-          class: 'rd-term', title: 'Add to review deck',
-          onclick: () => toast(addCard(term, `${pos_} ${def}`, '') ? `“${term}” added to your review deck` : 'Already in your review deck'),
-        }, h('strong', {}, term), h('em', {}, pos_), h('span', {}, def), icon('plus', 14))))
+      ? h('div', { class: 'rd-gloss' }, ...pageWords.map(([term, ipa, zhDef, enDef]) => {
+        let showingChinese = false;
+        const definition = h('span', {}, enDef || 'English definition unavailable.');
+        const reveal = h('button', {
+          class: 'rd-term rd-term-reveal', title: 'Show Chinese definition',
+          'aria-expanded': 'false', onclick: () => {
+            showingChinese = !showingChinese;
+            definition.textContent = showingChinese ? zhDef : (enDef || 'English definition unavailable.');
+            reveal.setAttribute('aria-expanded', String(showingChinese));
+            reveal.title = showingChinese ? 'Show English definition' : 'Show Chinese definition';
+          },
+        }, h('strong', {}, term), h('em', {}, ipa), definition);
+        const add = h('button', {
+          class: 'icon-btn sm', title: 'Add to review deck', 'aria-label': `Add ${term} to review deck`,
+          onclick: () => toast(addCard(term, zhDef, sents.find(s => s.toLowerCase().includes(term)) || text) ? `“${term}” added to your review deck` : 'Already in your review deck'),
+        }, icon('plus', 14));
+        return h('div', { class: 'rd-term-row' }, reveal, add);
+      }))
       : h('p', { class: 'rd-empty' }, 'No dictionary entries for this paragraph.');
     const side = h('section', { class: 'wm-card glass rd-side' },
       h('div', { class: 'wm-card-head' },

@@ -9,7 +9,8 @@ export function paragraphVocabulary(text, dictionary) {
     seen.add(word);
     const entry = dictionary[word];
     if (!entry) continue;
-    result.push([word, entry[0], entry[1].replace(/\\n/g, '\n')]);
+    result.push([word, entry[0], entry[1].replace(/\\n/g, '\n'),
+      (entry[2] || '').replace(/\\n/g, '\n')]);
   }
   return result;
 }

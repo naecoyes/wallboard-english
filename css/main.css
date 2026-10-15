@@ -672,6 +672,10 @@ html[data-theme="dark"] .answer { color: var(--ink); }
 .rd-dot.on { background: var(--green); }
 .rd-gloss { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: .125rem; margin: 0 -.5rem; padding: 0 .5rem; }
 .rd-term { display: grid; grid-template-columns: auto auto 1fr auto; align-items: baseline; gap: .1rem .5rem; text-align: left; padding: .55rem .625rem; border-radius: .75rem; border: none; background: transparent; color: var(--ink); font-size: .9rem; line-height: 1.35; }
+.rd-term-row { display: flex; align-items: center; gap: .25rem; }
+.rd-term-reveal { flex: 1; min-width: 0; grid-template-columns: auto 1fr; }
+.rd-term-reveal span { grid-column: 1 / -1; white-space: pre-line; overflow-wrap: anywhere; }
+.rd-term-row > .icon-btn { flex-shrink: 0; color: var(--green); }
 .rd-term strong { font-weight: 850; }
 .rd-term em { color: var(--muted); font-size: .8rem; }
 .rd-term span { color: var(--ink); opacity: .82; }

@@ -11,15 +11,25 @@ articles = [json.loads(line.rstrip(',')) for line in src.splitlines() if line.st
 words = {w.lower().replace('’', "'") for a in articles for p in a['paras'] for s in p
          for w in re.findall(r"[A-Za-z]+(?:['’-][A-Za-z]+)*", s)}
 entries = {}
+scores = {}
+
+def add(key, row, score):
+    if key not in words or not row['translation'] or score <= scores.get(key, -1):
+        return
+    scores[key] = score
+    entries[key] = [row['phonetic'], row['translation'], row['definition']]
+
 with (ROOT / 'tools/.cache/ecdict.csv').open(newline='') as f:
     for row in csv.DictReader(f):
         word = row['word'].lower()
-        if word in words and row['translation']:
-            entries[word] = [row['phonetic'], row['translation']]
+        # Prefer ordinary dictionary words and their inflections over uppercase acronyms.
+        common = bool(row['collins'] or row['oxford'] or row['tag'])
+        score = (4 if common else 1) + (1 if row['word'] == word else 0)
+        add(word, row, score)
         for form in row['exchange'].split('/'):
             value = form.partition(':')[2].lower()
-            if value in words and value not in entries and row['translation']:
-                entries[value] = [row['phonetic'], row['translation']]
+            if value:
+                add(value, row, score - 0.5)
 (ROOT / 'js/reading-dictionary.js').write_text(
     '// Reading vocabulary: ECDICT (MIT), https://github.com/skywind3000/ECDICT\n'
     + 'export const READING_DICTIONARY = ' + json.dumps(entries, ensure_ascii=False) + ';\n')
