@@ -345,7 +345,7 @@ html[data-theme="dark"] .seg a, html[data-theme="dark"] .nav-icon { background: 
 .goal-chip small { display: block; color: var(--muted); font-size: .7rem; }
 .goal-chip strong { font-size: .94rem; font-weight: 850; }
 
-.ec-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(17rem, .95fr); gap: 1.25rem; align-items: stretch; flex: 1; min-height: 0; }
+.ec-grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(17rem, .95fr); gap: 1.25rem; align-items: start; min-height: 0; }
 .ec-col { display: flex; flex-direction: column; gap: .875rem; min-width: 0; min-height: 0; }
 
 /* 绿色短语主卡 */
@@ -384,7 +384,7 @@ html[data-theme="dark"] .seg a, html[data-theme="dark"] .nav-icon { background: 
 .text-btn { background: transparent; border: 0; color: var(--green); font-size: .8125rem; font-weight: 850; padding: .5rem .125rem; text-decoration: none; }
 
 /* 今天的学习路线（2×2） */
-.ec-route { flex: 1; display: flex; flex-direction: column; }
+.ec-route { display: flex; flex-direction: column; }
 .tasks { display: grid; grid-template-columns: 1fr 1fr; gap: .625rem; }
 .task {
   display: grid; grid-template-columns: 2.3rem minmax(0, 1fr) auto; align-items: center; gap: .65rem;
@@ -967,7 +967,7 @@ html[data-motion="off"] ::backdrop { animation: none !important; transition: non
 }
 
 /* Lifetime learning tree: uses the active palette in light and dark themes. */
-.learning-tree { flex-shrink: 0; margin-top: auto; }
+.learning-tree { flex-shrink: 0; }
 .learning-tree .ec-head { margin-bottom: .35rem; }
 .lt-body { display: grid; grid-template-columns: minmax(5.5rem, .85fr) minmax(0, 1.4fr); gap: .7rem; align-items: center; }
 .lt-art { display: block; width: 100%; max-height: 8rem; overflow: visible; }
