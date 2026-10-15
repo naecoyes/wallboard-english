@@ -3,6 +3,8 @@
 // 文章数据约 400 KB，进入本页时才按需加载
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
+import { READING_DICTIONARY } from '../reading-dictionary.js';
+import { paragraphVocabulary } from '../reading-vocabulary.js';
 import { AdvanceClock } from '../auto-advance.js';
 import { lookupFromEvent, closeLookup, showLookup } from '../lookup.js';
 import { attachSwipe } from '../swipe.js';
@@ -302,16 +304,17 @@ export function renderReading(root) {
           autoSec ? h('span', { class: 'wm-auto' }, progressFill) : null)));
 
     // ---------- 右：词汇表 + 来源 ----------
-    const gloss = a.gloss.length
-      ? h('div', { class: 'rd-gloss' }, ...a.gloss.map(([term, pos_, def]) =>
+    const pageWords = paragraphVocabulary(text, READING_DICTIONARY);
+    const gloss = pageWords.length
+      ? h('div', { class: 'rd-gloss' }, ...pageWords.map(([term, pos_, def]) =>
         h('button', {
           class: 'rd-term', title: 'Add to review deck',
           onclick: () => toast(addCard(term, `${pos_} ${def}`, '') ? `“${term}” added to your review deck` : 'Already in your review deck'),
         }, h('strong', {}, term), h('em', {}, pos_), h('span', {}, def), icon('plus', 14))))
-      : h('p', { class: 'rd-empty' }, 'No word list for this article.');
+      : h('p', { class: 'rd-empty' }, 'No dictionary entries for this paragraph.');
     const side = h('section', { class: 'wm-card glass rd-side' },
       h('div', { class: 'wm-card-head' },
-        h('span', { class: 'wm-label' }, `WORDS IN THIS STORY · ${a.gloss.length}`),
+        h('span', { class: 'wm-label' }, `WORDS ON THIS PAGE · ${pageWords.length}`),
         h('span', { class: 'chip' + (done().has(a.id) ? ' green' : '') }, done().has(a.id) ? 'Read ✓' : `${a.words} words`)),
       h('div', { class: 'rd-progress' }, ...a.paras.map((_, i) =>
         h('button', { class: 'rd-dot' + (i === pos ? ' on' : i < pos ? ' past' : ''), 'aria-label': `Paragraph ${i + 1}`, onclick: () => go(i) }))),
