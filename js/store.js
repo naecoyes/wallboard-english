@@ -10,6 +10,7 @@ const defaults = () => ({
     dailyGoalMin: 25, voiceURI: null, rate: 0.95, lastBackupHint: null,
     idleMin: 2,        // 无操作多少分钟后自动进入单词模式
     sentenceAutoSec: 45, // 日常用句自动切换间隔，0 = 关闭
+    readingAutoSec: 60, // 短文自动翻段间隔，0 = 关闭
     wordAutoSec: 45,   // 单词模式自动切换间隔（0 = 不自动切换）
     wordAutoPlay: true, // 切换到新词时自动朗读
     theme: 'auto',     // auto 按时间段 / system 跟随系统 / light 白天 / dark 夜间
@@ -28,6 +29,7 @@ const defaults = () => ({
   },
   words: { idx: 0, known: [], unknown: [] }, // 单词模式进度：当前位置 / 太简单 / 不认识
   sentences: { scene: 'all', pos: {}, known: [] }, // 日常用句：当前场景 / 各场景位置 / 已掌握的句子 id
+  reading: { id: null, pos: {}, done: [], level: 'all' }, // 短文：当前文章 / 各文章段落位置 / 读完的文章 id / 级别筛选
   audioOverrides: {}, // 发音纠错：单词 → 'mimo'（已重生成）/ 'system'（改用浏览器语音）
   updatedAt: 0,       // 最近一次内容变化的时间，同步时判断哪边更新
   seeded: false,
@@ -59,6 +61,9 @@ function migrate(data) {
   out.words = { ...d.words, ...(data.words || {}) };
   out.sentences = { ...d.sentences, ...(data.sentences || {}) };
   if (!out.sentences.pos || typeof out.sentences.pos !== 'object') out.sentences.pos = {};
+  out.reading = { ...d.reading, ...(data.reading || {}) };
+  if (!out.reading.pos || typeof out.reading.pos !== 'object') out.reading.pos = {};
+  if (!Array.isArray(out.reading.done)) out.reading.done = [];
   out.cards = Array.isArray(data.cards) ? data.cards : [];
   out.sessions = Array.isArray(data.sessions) ? data.sessions : [];
   out.audioOverrides = data.audioOverrides && typeof data.audioOverrides === 'object' ? { ...data.audioOverrides } : {};

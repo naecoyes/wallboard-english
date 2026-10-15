@@ -170,6 +170,7 @@ export function renderSettings(root) {
   const idleSelect = pick('idleMin', [[1, '1 min'], [2, '2 min'], [3, '3 min'], [5, '5 min'], [10, '10 min']], 'Idle time');
   const autoSelect = pick('wordAutoSec', [[0, 'Off'], [30, 'Every 30 s'], [45, 'Every 45 s'], [60, 'Every 1 min'], [120, 'Every 2 min']], 'Auto-advance');
   const sentenceAutoSelect = pick('sentenceAutoSec', [[0, 'Off'], [15, 'Every 15 s'], [30, 'Every 30 s'], [45, 'Every 45 s'], [60, 'Every 1 min'], [120, 'Every 2 min']], 'Sentence auto-advance');
+  const readingAutoSelect = pick('readingAutoSec', [[0, 'Off'], [30, 'Every 30 s'], [60, 'Every 1 min'], [120, 'Every 2 min'], [180, 'Every 3 min']], 'Reading auto-advance');
   const autoPlaySel = h('select', {},
     ...[['on', 'On'], ['off', 'Off']].map(([v, t]) =>
       h('option', { value: v, ...((s.settings.wordAutoPlay !== false ? 'on' : 'off') === v ? { selected: '' } : {}) }, t)));
@@ -266,6 +267,7 @@ export function renderSettings(root) {
     row('repeat', 'c-sky', 'Word auto-advance',
       `${wst.known.length} known · ${wst.unknown.length} learning (in your review deck)`, autoSelect),
     row('timer', 'c-sky', 'Sentence auto-advance', 'Countdown resets on touch and pauses in the background; stays within the selected scene', sentenceAutoSelect),
+    row('article', 'c-sky', 'Reading auto-advance', 'Moves to the next paragraph; waits while VOA audio is playing', readingAutoSelect),
     row('volume', 'c-green', 'Read aloud automatically', 'Words and sentences are spoken when they appear (words also when auto-advancing)', autoPlaySel),
     row('sun', 'c-amber', 'Keep screen on',
       wakeLockSupported() ? 'Tap the page once to activate'

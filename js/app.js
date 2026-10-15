@@ -16,6 +16,7 @@ import { renderFocus } from './modes/focus.js';
 import { renderSettings } from './modes/settings.js';
 import { renderWord } from './modes/word.js';
 import { renderSentences } from './modes/sentences.js';
+import { renderReading } from './modes/reading.js';
 
 // ---------- 首次运行：导入初始卡组 ----------
 if (!get().seeded) {
@@ -37,6 +38,7 @@ const ROUTES = {
   focus: renderFocus,
   word: renderWord,
   sentences: renderSentences,
+  reading: renderReading,
   settings: renderSettings,
 };
 
@@ -61,7 +63,7 @@ window.addEventListener('wallboard:remote-updated', () => {
   applyTheme();
   const name = (location.hash || '#standby').slice(1);
   if (document.querySelector('dialog[open]')) return;
-  if (!(name === 'standby' || name === 'word' || name === 'sentences' || !ROUTES[name])) return;
+  if (!(name === 'standby' || name === 'word' || name === 'sentences' || name === 'reading' || !ROUTES[name])) return;
   // 同步刷新不播放入场动画：渲染时标记 quiet，渲染完把动画直接跳到结束
   document.documentElement.dataset.quiet = '1';
   route();
@@ -77,7 +79,7 @@ function resetIdle() {
   clearTimeout(idleTimer);
   if (externalStudyActive()) return;
   const hash = location.hash || '';
-  if (hash === '#focus' || hash === '#word' || hash === '#sentences') return; // 专注有自己的计时；单词模式本身就是待机内容
+  if (hash === '#focus' || hash === '#word' || hash === '#sentences' || hash === '#reading') return; // 专注有自己的计时；单词模式本身就是待机内容
   const idleMs = Math.max(1, get().settings.idleMin || 2) * 60 * 1000;
   idleTimer = setTimeout(() => { if (!externalStudyActive()) location.hash = '#word'; }, idleMs);
 }

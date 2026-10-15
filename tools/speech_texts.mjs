@@ -3,6 +3,7 @@
 import { DAILY, PASSAGES, QUICK_QUESTIONS, SEED_DECK } from '../js/content.js';
 import { WORDS } from '../js/words.js';
 import { SENTENCES } from '../js/sentences.js';
+import { PASSAGES as READING } from '../js/passages.js';
 const out = new Set();
 const add = t => { if (t && t.trim()) out.add(t.trim()); };
 for (const w of WORDS) for (const e of w.ex) add(e[0]);          // 单词例句
@@ -14,6 +15,7 @@ for (const p of PASSAGES) {
   p.phrases.forEach(x => add(x.en));                               // 表达积累
   add(p.question);                                                 // 口语问题
 }
+for (const a of READING) a.paras.flat().forEach(add);              // 短文模式：逐句朗读
 QUICK_QUESTIONS.forEach(add);                                      // 快答
 SEED_DECK.forEach(c => add(c.front));                              // 初始卡组
 add('Practice a little every day, and you will improve.');         // 设置页试听

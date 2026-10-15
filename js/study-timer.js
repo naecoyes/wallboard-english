@@ -18,7 +18,7 @@ export class ActiveClock {
   pause(now, paused) { this.sample(now); this.paused = paused; if (!paused) this.activity = now; }
 }
 
-const MODES = new Set(['micro', 'focus', 'word', 'sentences']);
+const MODES = new Set(['micro', 'focus', 'word', 'sentences', 'reading']);
 let current = null;
 const now = () => performance.now();
 export const formatStudyTime = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
