@@ -660,6 +660,9 @@ html[data-theme="dark"] .answer { color: var(--ink); }
 .rd-sent { cursor: pointer; border-radius: .35rem; padding: .08em .28em; margin: 0 -.14em; transition: background .18s, box-shadow .18s; }
 .rd-sent:hover { background: rgba(255, 255, 255, .12); }
 .rd-sent:active { background: rgba(255, 255, 255, .2); }
+.rd-word { cursor: pointer; border-radius: .2em; }
+.rd-word:hover, .rd-word:focus-visible, .rd-word.playing { background: rgba(255, 255, 255, .28); outline: 1px solid rgba(255, 255, 255, .5); }
+.rd-hero .sn-actions { flex-wrap: wrap; }
 .rd-sent.playing { background: rgba(255, 255, 255, .28); box-shadow: 0 0 0 2px rgba(255, 255, 255, .42), 0 2px 8px rgba(0, 0, 0, .14); }
 .rd-zh { margin-top: 1rem; font-size: 1.125rem; }
 .rd-side { display: flex; flex-direction: column; min-height: 0; padding-bottom: .875rem; }

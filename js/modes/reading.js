@@ -4,7 +4,7 @@
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { AdvanceClock } from '../auto-advance.js';
-import { lookupFromEvent, closeLookup } from '../lookup.js';
+import { lookupFromEvent, closeLookup, showLookup } from '../lookup.js';
 import { attachSwipe } from '../swipe.js';
 import { get, update, addXP } from '../store.js';
 import { addCard } from '../srs.js';
@@ -22,6 +22,7 @@ export function renderReading(root) {
   let art = null;
   let pos = 0;
   let revealed = false;
+  let tapMode = get().settings.readingTapMode || 'word';
   let alive = true;
   const autoSec = get().settings.readingAutoSec ?? 60;
   const advance = new AdvanceClock(autoSec, performance.now(), !document.hidden);
@@ -221,13 +222,13 @@ export function renderReading(root) {
     revealBtn.addEventListener('click', toggle);
     zh.addEventListener('click', toggle);
 
-    const para = h('div', { class: 'rd-para', style: `font-size:${sizeFor(text)}rem`, title: 'Tap a sentence to hear it · double-tap or long-press a word for meaning' },
+    const para = h('div', { class: 'rd-para', style: `font-size:${sizeFor(text)}rem`, title: tapMode === 'word' ? 'Tap a word for Chinese meaning and pronunciation' : 'Tap a sentence to hear it' },
       ...sents.flatMap((s, i) => [
         h('span', {
           class: 'rd-sent',
           onclick: (e) => {
             e.stopPropagation();
-            playSentence(s, e.currentTarget);
+            if (tapMode === 'sentence') playSentence(s, e.currentTarget);
           },
           ondblclick: (e) => {
             e.stopPropagation();
@@ -238,7 +239,22 @@ export function renderReading(root) {
             e.stopPropagation();
             lookupFromEvent(e);
           },
-        }, s),
+        }, ...(tapMode === 'word' ? s.split(/([A-Za-z]+(?:['’-][A-Za-z]+)*)/g).map((part, j) => j % 2
+          ? h('span', {
+            class: 'rd-word', role: 'button', tabindex: '0',
+            onclick: e => {
+              e.stopPropagation();
+              playSentence(part, e.currentTarget);
+              showLookup(part, e.clientX, e.clientY);
+            },
+            onkeydown: e => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault(); e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              playSentence(part, e.currentTarget);
+              showLookup(part, rect.left + rect.width / 2, rect.bottom);
+            },
+          }, part) : part) : [s])),
         i < sents.length - 1 ? ' ' : null,
       ]));
     voaBtn = a.audio ? h('button', { class: 'sn-pill', onclick: toggleVoa }) : null;
@@ -251,6 +267,14 @@ export function renderReading(root) {
       pos === 0 ? h('div', { class: 'rd-title' }, a.title) : null,
       h('div', { class: 'rd-scroll' }, para, zh),
       h('div', { class: 'sn-actions' },
+        ...[['sentence', 'Sentence'], ['word', 'Word · 中文']].map(([value, label]) =>
+          h('button', { class: 'sn-pill' + (tapMode === value ? ' light' : ''),
+            'aria-pressed': String(tapMode === value), onclick: () => {
+              readingSeq++; stopSpeak(); clearActiveSent(); closeLookup();
+              tapMode = value;
+              update(s => { s.settings.readingTapMode = value; });
+              paint();
+            } }, label)),
         h('button', { class: 'sn-pill light speak-btn', onclick: readParagraph }, icon('volume', 16), 'Listen'),
         voaBtn, revealBtn),
       h('div', { class: 'wm-spacer' }),

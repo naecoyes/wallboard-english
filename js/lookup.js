@@ -70,9 +70,16 @@ export async function showLookup(word, x, y) {
       ...hit.defs.map(([pos, zh]) => h('div', {}, `${pos} ${zh}`)),
       ...(hit.enDefs || []).slice(0, 1).map(d => h('div', { class: 'lk-en' }, d))];
   } else {
-    const o = await online(word);
-    content = o ? [h('div', { class: 'lk-ipa' }, o.ipa), ...o.lines.map(l => h('div', { class: 'lk-en' }, l))]
-      : [h('div', { class: 'lk-en' }, 'No entry found.')];
+    const { READING_DICTIONARY } = await import('./reading-dictionary.js');
+    const entry = READING_DICTIONARY[word.toLowerCase().replace(/’/g, "'")];
+    if (entry) {
+      content = [h('div', { class: 'lk-ipa' }, entry[0]),
+        ...entry[1].split('\n').map(line => h('div', {}, line))];
+    } else {
+      const o = await online(word);
+      content = [h('div', {}, '暂无中文释义'),
+        ...(o ? [h('div', { class: 'lk-ipa' }, o.ipa), ...o.lines.map(l => h('div', { class: 'lk-en' }, l))] : [])];
+    }
   }
   if (pop !== mine) return;
   body.replaceChildren(...content);
