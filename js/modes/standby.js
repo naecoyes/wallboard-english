@@ -1,16 +1,15 @@
 import { sessionDay, sessionSeconds } from '../study-timer.js';
 import { createLearningTree } from '../learning-tree.js';
 // standby.js — 今日仪表盘（横屏一屏放下）
-// 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、该复习了、小提醒
+// 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、学习树；左栏底部为小提醒
 // 所有数字都来自真实学习记录（sessions / 卡组 / 打卡），不是手动勾选
 import { h, toast, countUp } from '../ui.js';
 import { icon } from '../icons.js';
-import { get, addXP } from '../store.js';
+import { get } from '../store.js';
 import { displayStreak, minutesToday, studyDay, hasCheckedInToday, dayStr } from '../streak.js';
-import { dueCards, addCard, reviewCard } from '../srs.js';
+import { addCard } from '../srs.js';
 import { DAILY } from '../content.js';
 import { openExternalStudy } from '../external-study.js';
-import { openDeck } from '../deck.js';
 import { speak, ttsAvailable, prefetch } from '../tts.js';
 
 const RESOURCES = [
@@ -209,47 +208,6 @@ function build(root) {
       })),
     h('div', { class: 'weekly-caption' }, h('span', {}, `${weekDays} active day${weekDays === 1 ? '' : 's'} this week`), h('span', {}, `Goal: ${goal} min/day`)));
 
-  // ---------- 右栏：该复习了 ----------
-  const reviewBox = h('div', {});
-  const review = h('section', { class: 'ec-card ec-review' },
-    h('div', { class: 'ec-head' },
-      h('div', {}, h('h2', {}, 'Time to review'), h('p', {}, "Recall first, then reveal. Forgetting is normal.")),
-      h('button', { class: 'text-btn', onclick: () => openDeck(() => paintReview()) }, `Deck (${s.cards.length})`)),
-    reviewBox);
-  function paintReview() {
-    const due = dueCards();
-    reviewBox.replaceChildren();
-    if (!due.length) {
-      reviewBox.append(h('div', { class: 'empty-state' }, 'No cards due today.', h('strong', {}, "Learn today's new phrase instead.")));
-      return;
-    }
-    const c = due[0];
-    const cnEl = h('div', { class: 'review-cn' }, 'Tap “Show answer” to check yourself.');
-    const showBtn = h('button', { class: 'go' }, 'Show answer');
-    const againBtn = h('button', {}, 'Not yet');
-    const grade = (q) => {
-      reviewCard(c.id, q);
-      addXP(2);
-      toast(q === 2 ? 'Got it — next review scheduled.' : "No worries — you'll see it again tomorrow.");
-      paintReview();
-    };
-    showBtn.addEventListener('click', () => {
-      if (showBtn.dataset.shown) return grade(2);
-      showBtn.dataset.shown = '1';
-      cnEl.textContent = c.back + (c.example ? `  ·  ${c.example}` : '');
-      showBtn.textContent = 'I knew it';
-    });
-    againBtn.addEventListener('click', () => grade(0));
-    reviewBox.append(
-      h('div', { class: 'review-item' },
-        h('div', { class: 'review-word' }, c.front), cnEl,
-        h('div', { class: 'review-actions' }, showBtn, againBtn)),
-      h('div', { class: 'review-more' },
-        h('span', {}, `${due.length} card${due.length === 1 ? '' : 's'} due today`),
-        h('a', { class: 'text-btn', href: '#micro' }, 'Review in Quick 5 →')));
-  }
-  paintReview();
-
   // ---------- 右栏：小提醒（到期时优先提醒备份） ----------
   const lastBk = s.settings.lastBackupHint;
   const needBackup = !lastBk || (Date.now() - new Date(lastBk).getTime()) > 7 * 864e5;
@@ -266,7 +224,7 @@ function build(root) {
     greet,
     h('main', { class: 'ec-grid' },
       h('div', { class: 'ec-col' }, hero, route, tip),
-      h('aside', { class: 'ec-col' }, stats, weekly, review, tree.element)),
+      h('aside', { class: 'ec-col' }, stats, weekly, tree.element)),
     null);
   root.append(wrap);
 
