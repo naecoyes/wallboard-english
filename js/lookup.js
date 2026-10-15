@@ -47,7 +47,7 @@ export function wordAtPoint(x, y) {
 
 export function closeLookup() { pop?.remove(); pop = null; }
 
-export async function showLookup(word, x, y) {
+export async function showLookup(word, x, y, overrides = {}) {
   closeLookup();
   const body = h('div', { class: 'lk-body' }, 'Looking up…');
   pop = h('aside', { class: 'lookup-pop', role: 'dialog', 'aria-label': `Meaning of ${word}` },
@@ -63,9 +63,12 @@ export async function showLookup(word, x, y) {
   pop.style.top = `${Math.min(y + 18, innerHeight - pop.offsetHeight - 8)}px`;
   const mine = pop;
 
-  const hit = await local(word);
+  const override = overrides[word.toLowerCase().replace(/’/g, "'")];
+  const hit = override ? null : await local(word);
   let content;
-  if (hit) {
+  if (override) {
+    content = [h('div', {}, override[1]), h('div', { class: 'lk-en' }, override[2])];
+  } else if (hit) {
     content = [h('div', { class: 'lk-ipa' }, hit.ipa || ''),
       ...hit.defs.map(([pos, zh]) => h('div', {}, `${pos} ${zh}`)),
       ...(hit.enDefs || []).slice(0, 1).map(d => h('div', { class: 'lk-en' }, d))];

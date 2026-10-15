@@ -5,6 +5,7 @@ import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { READING_DICTIONARY } from '../reading-dictionary.js';
 import { paragraphVocabulary } from '../reading-vocabulary.js';
+import { TECHNICAL_VOCABULARY, isTechnicalPresentation } from '../technical-vocabulary.js';
 import { AdvanceClock } from '../auto-advance.js';
 import { lookupFromEvent, closeLookup, showLookup } from '../lookup.js';
 import { attachSwipe } from '../swipe.js';
@@ -265,14 +266,14 @@ export function renderReading(root) {
             onclick: e => {
               e.stopPropagation();
               playSentence(part, e.currentTarget);
-              showLookup(part, e.clientX, e.clientY);
+              showLookup(part, e.clientX, e.clientY, isTechnicalPresentation(art) ? TECHNICAL_VOCABULARY : {});
             },
             onkeydown: e => {
               if (e.key !== 'Enter' && e.key !== ' ') return;
               e.preventDefault(); e.stopPropagation();
               const rect = e.currentTarget.getBoundingClientRect();
               playSentence(part, e.currentTarget);
-              showLookup(part, rect.left + rect.width / 2, rect.bottom);
+              showLookup(part, rect.left + rect.width / 2, rect.bottom, isTechnicalPresentation(art) ? TECHNICAL_VOCABULARY : {});
             },
           }, part) : part) : [s])),
         i < sents.length - 1 ? ' ' : null,
@@ -304,7 +305,9 @@ export function renderReading(root) {
           autoSec ? h('span', { class: 'wm-auto' }, progressFill) : null)));
 
     // ---------- 右：词汇表 + 来源 ----------
-    const pageWords = paragraphVocabulary(text, READING_DICTIONARY);
+    const dictionary = isTechnicalPresentation(a)
+      ? { ...READING_DICTIONARY, ...TECHNICAL_VOCABULARY } : READING_DICTIONARY;
+    const pageWords = paragraphVocabulary(text, dictionary);
     const gloss = pageWords.length
       ? h('div', { class: 'rd-gloss' }, ...pageWords.map(([term, ipa, zhDef, enDef]) => {
         let showingChinese = false;
