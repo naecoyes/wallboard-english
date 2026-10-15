@@ -164,7 +164,9 @@ def select():
 
 
 def main():
-    arts = select()
+    custom_path = os.path.join(ROOT, 'tools', 'custom_passages.json')
+    custom_arts = json.load(open(custom_path, encoding='utf-8')) if os.path.exists(custom_path) else []
+    arts = custom_arts + select()
     print(f'selected {len(arts)}: B1={sum(a["level"] == "B1" for a in arts)} B2={sum(a["level"] == "B2" for a in arts)}', file=sys.stderr)
     en = {str(a['id']): {'title': a['title'], 'heads': a['heads'], 'paras': [' '.join(p) for p in a['paras']]} for a in arts}
     if '--list' in sys.argv:
@@ -188,7 +190,7 @@ def main():
         '// 文章来自 VOA Learning English（https://learningenglish.voanews.com），VOA 自有内容属美国公有领域；url 为原文链接',
         '// 中文翻译为本站补充（tools/passages_zh.json）',
         f'// 共 {len(arts)} 篇',
-        'export const PASSAGE_CATS = ' + json.dumps([[c[0], c[1], c[2]] for c in CATS], ensure_ascii=False) + ';',
+        'export const PASSAGE_CATS = ' + json.dumps([['custom', 'My articles', 'B2']] + [[c[0], c[1], c[2]] for c in CATS], ensure_ascii=False) + ';',
         'export const PASSAGES = [',
     ]
     lines += [json.dumps({k: a[k] for k in order}, ensure_ascii=False) + ',' for a in arts]

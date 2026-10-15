@@ -657,8 +657,10 @@ html[data-theme="dark"] .answer { color: var(--ink); }
 .rd-title { margin-top: .75rem; font-size: 1rem; font-weight: 800; color: var(--hero-soft); }
 .rd-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; margin-top: 1rem; padding-right: .25rem; scrollbar-width: thin; }
 .rd-para { font-weight: 700; line-height: 1.45; letter-spacing: -.01em; overflow-wrap: anywhere; }
-.rd-sent { cursor: pointer; border-radius: .3rem; transition: background .2s; }
-.rd-sent:active { background: rgba(255, 255, 255, .16); }
+.rd-sent { cursor: pointer; border-radius: .35rem; padding: .08em .28em; margin: 0 -.14em; transition: background .18s, box-shadow .18s; }
+.rd-sent:hover { background: rgba(255, 255, 255, .12); }
+.rd-sent:active { background: rgba(255, 255, 255, .2); }
+.rd-sent.playing { background: rgba(255, 255, 255, .28); box-shadow: 0 0 0 2px rgba(255, 255, 255, .42), 0 2px 8px rgba(0, 0, 0, .14); }
 .rd-zh { margin-top: 1rem; font-size: 1.125rem; }
 .rd-side { display: flex; flex-direction: column; min-height: 0; padding-bottom: .875rem; }
 .rd-progress { display: flex; flex-wrap: wrap; gap: .3rem; margin: .25rem 0 .75rem; }

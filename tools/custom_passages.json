@@ -1,0 +1,238 @@
+[
+  {
+    "id": 9000001,
+    "title": "AI-Pentester Platform Usage Presentation",
+    "cat": "custom",
+    "level": "B2",
+    "date": "2025-03-15",
+    "url": "https://github.com/jiwoochris/artex-global/blob/main/README.zh.md",
+    "audio": "",
+    "words": 1219,
+    "heads": [
+      "Presenter's Note",
+      "1. Opening: What I'll Cover",
+      "Proven Real-World Results",
+      "Controlled Testing Objectives",
+      "Scoring Table Guidance",
+      "2. Model Configuration",
+      "Context Budget & Verification",
+      "3. Creating a Task",
+      "Defining Goals & Deliverables",
+      "Reviewing Before Submission",
+      "4. Dashboard and Task Status",
+      "5. Exploration, Assets & Coverage",
+      "Asset Management & Scope",
+      "ScopeSentry Asset Sync",
+      "6. Tool Calls, Traffic & Approvals",
+      "Human Approvals & Control",
+      "7. Findings and Retesting",
+      "Verification & Manual Retesting",
+      "8. Agents, Settings & Maintenance",
+      "LLM Settings & Logs",
+      "Version Updates & Routine Maintenance",
+      "9. Summary: Complete Workflow",
+      "Scoring Table & Evidence Baseline",
+      "Safety Restrictions & Compliance"
+    ],
+    "paras": [
+      [
+        "Section titles and timing notes are not meant to be read aloud.",
+        "This script is written for a remote presentation reviewing practical experience; it does not depend on a live demo or screen sharing."
+      ],
+      [
+        "Today, I’d like to share my experience using this AI penetration-testing platform.",
+        "Since everyone here has experience with AI tools, I won’t start with basic concepts.",
+        "Instead, I’ll review how we use it in practice, how we configure tasks, and how we assess whether the results are reliable."
+      ],
+      [
+        "I recommend this tool because, combined with our workflow, it has been very effective in real projects.",
+        "It has identified many genuine vulnerabilities, including some that were not found in previous professional red-team testing.",
+        "Its false-positive rate has also been low: many findings can be reproduced and used as evidence in reports.",
+        "Today’s session is not a proof of concept, but a review of an approach we have used in practice and seen deliver results."
+      ],
+      [
+        "Our objective is to identify as many issues as possible without affecting business operations.",
+        "Testing should cover different risks within the authorized scope, rather than focus on only one type of issue.",
+        "At the same time, testing must remain controlled: finding more issues must not affect the business or exceed the authorization boundary."
+      ],
+      [
+        "We use a scoring table to guide task direction, assess the impact of findings, and keep tasks focused.",
+        "It reflects lessons from our practical experience, and we have seen better results when tasks are configured this way.",
+        "Today, I’ll focus on the platform’s features and workflow, and only give a high-level overview of the scoring table."
+      ],
+      [
+        "Model configuration includes the provider, model identifier, and related parameters.",
+        "One configuration that has worked well for us is DS4.1 Flash, with thinking disabled and a 200K context window.",
+        "The API identifier is deepseek-flash; its actual mapping depends on the provider."
+      ],
+      [
+        "The 200K value refers to context length, not the maximum output of a single response.",
+        "After changing a model or its parameters, I first use a small task to check connectivity, tool calls, output, and errors before using it further.",
+        "Model settings should fit the task; larger parameters do not automatically mean better results."
+      ],
+      [
+        "A task is the entry point to the workflow.",
+        "When creating one, first select the task type, then define the goal and testing scope.",
+        "Specify the assets that are authorized for testing.",
+        "Hosts, endpoints, or subdomains that are not listed should not be assumed to be in scope.",
+        "List any explicit exclusions separately.",
+        "This gives the agent clear boundaries before it starts working."
+      ],
+      [
+        "Next, define the goal.",
+        "We use a scoring approach developed from practical tasks to keep the work focused, but there is no need to read out every scoring-table entry.",
+        "The important thing is to specify the areas to cover and the expected deliverables, so each conclusion is supported by evidence rather than simply telling the tool to “find more issues.”"
+      ],
+      [
+        "Then confirm the model configuration, timeout, and other task parameters.",
+        "Before submitting, I review the goal, scope, exclusions, and runtime settings.",
+        "If anything is incomplete, I clarify it rather than letting the agent guess.",
+        "After submission, I open the task details from the task list to follow its plan, activity, and tool calls."
+      ],
+      [
+        "The dashboard provides a quick overview of task progress, token usage, and recent activity.",
+        "Use the task list to locate a run, then open its details to review sessions, execution, and tool calls.",
+        "I first check whether the task remains in scope, then look for unusual activity or anything requiring human attention.",
+        "Token usage can help estimate cost, but it is not by itself a measure of task quality."
+      ],
+      [
+        "The exploration view helps us review how a task was broken down into different directions and what facts and findings were recorded along the way.",
+        "When reviewing a conclusion, I trace it back to the steps and evidence that support it, and check whether anything remains unconfirmed."
+      ],
+      [
+        "The asset page manages assets and their relationships, while the coverage map shows which in-scope assets have been covered by a task.",
+        "A relationship between assets does not automatically authorize testing all of them.",
+        "After importing or discovering an asset, confirm ownership and authorization before including it in a task."
+      ],
+      [
+        "If the team uses ScopeSentry, the asset-sync page can connect to the data source and import selected asset types—such as domains, subdomains, IPs, ports, sites, or endpoints—by project or task.",
+        "Review the scope after import: an asset appearing in the platform does not mean authorization has been confirmed."
+      ],
+      [
+        "When reviewing execution, I do not rely only on the final summary.",
+        "I inspect tool calls and responses to check whether the model’s conclusions are supported by evidence.",
+        "When network interactions need to be reviewed, traffic recording can be used to examine requests and responses and help investigate issues in the execution process."
+      ],
+      [
+        "When an action requires human judgment, the approval feature lets us review its details before deciding whether to approve it.",
+        "Human-in-the-loop conversations can provide additional context, clarify restrictions, or ask the agent to pause and summarize the evidence already collected.",
+        "Approvals and records support review, but they do not replace the operator’s judgment."
+      ],
+      [
+        "The findings page brings issues and related evidence together.",
+        "During review, I check the affected assets, original evidence, reproduction conditions, and whether the conclusion is consistent with them.",
+        "If the evidence is insufficient, the result should be marked as unconfirmed rather than presented as a confirmed issue."
+      ],
+      [
+        "To verify a fix, a manual retest can be started from the findings list or detail page.",
+        "It creates a separate session, so the original task does not need to be restarted.",
+        "The result can be “still reproducible,” “fixed,” or “unable to confirm.”",
+        "The conclusion, evidence, and session record are retained for later review."
+      ],
+      [
+        "Agent management is used to configure role prompts, models, and runtime parameters.",
+        "Before making a change, identify the issue you want to solve.",
+        "Change one thing at a time and compare results using the same small task.",
+        "This makes it easier to assess whether the change helped."
+      ],
+      [
+        "The LLM configuration page is used to set the provider and related parameters.",
+        "After changing a model or endpoint, run a small check before broader use.",
+        "System settings manage global runtime parameters, so consider the impact on running tasks before changing them.",
+        "Backend logs can help troubleshoot service and task-execution issues."
+      ],
+      [
+        "Version updates are also part of routine maintenance.",
+        "Review the release notes and back up relevant data before updating.",
+        "Updates may restart the service and interrupt running tasks, so choose an appropriate maintenance window."
+      ],
+      [
+        "To summarize, the workflow is: define the task and scope, follow the exploration and tool calls, then review findings and evidence.",
+        "When needed, continue through approvals, human-in-the-loop conversations, or retesting."
+      ],
+      [
+        "The scoring table is a supporting method developed from practical experience.",
+        "It helps make task goals clearer and execution more focused, but it does not replace scope confirmation, evidence review, or human judgment.",
+        "Final conclusions must still be based on the authorization boundary and actual evidence."
+      ],
+      [
+        "One final note: before using the platform, check the usage instructions and safety restrictions for the current version.",
+        "The documentation we reviewed limits use to an isolated local environment and prohibits scanning, probing, or exploiting online systems.",
+        "If the deployed version retains this restriction, both operation and demonstration must stay within that boundary."
+      ]
+    ],
+    "zh": [
+      "章节标题和时间提示不需要朗读。本讲稿专为远程经验分享而写，不依赖现场演示或屏幕共享。",
+      "今天我想和大家分享使用这个 AI 渗透测试平台的经验。既然大家都有使用 AI 工具的经验，我就不再讲基础概念了。相反，我将回顾我们在实践中如何使用它、如何配置任务，以及如何评估结果是否可靠。",
+      "我推荐这个工具，是因为它结合我们的工作流程后在实际项目中非常有效。它发现了许多真实的漏洞，包括一些在之前专业红队测试中未被发现的漏洞。它的误报率也很低：许多漏洞成果都可以复现，并直接用作报告中的证据。今天的分享不是概念验证，而是对我们在实践中切实使用并取得成果的方法的回顾。",
+      "我们的目标是在不影响业务运营的前提下发现尽可能多的问题。测试应当覆盖授权范围内的不同风险，而不是只关注某一类问题。同时，测试必须保持受控：发现更多问题绝不能影响业务，也不能超出授权边界。",
+      "我们使用评分表来引导任务方向、评估漏洞成果的影响，并让任务保持专注。它反映了我们实践经验中的教训，当任务按这种方式配置时，我们看到了更好的结果。今天我将重点介绍平台的功能和工作流程，仅对评分表进行高层次的概览。",
+      "模型配置包括提供商、模型标识符和相关参数。对我们而言效果很好的一组配置是 DS4.1 Flash，关闭思考并配置 200K 上下文窗口。API 标识符是 deepseek-flash；它的实际映射取决于提供方。",
+      "200K 的数值指的是上下文长度，而不是单次响应的最大输出。在更改模型或其参数后，我通常先用一个小任务来检查连通性、工具调用、输出和报错，然后再进一步使用。模型设置应当契合任务；参数更大并不自动意味着效果更好。",
+      "任务是工作流程的入口。创建任务时，首先选择任务类型，然后定义目标和测试范围。明确指定已获授权进行测试的资产。未列出的主机、接口或子域名不应被假定在范围内。将任何明确的排除项单独列出。这会在智能体开始工作前为其划定明确的边界。",
+      "接下来定义目标。我们采用从实际任务中总结的评分方法来保持工作专注，但无需逐一朗读评分表条目。关键是明确要覆盖的领域和预期的交付物，以便每个结论都有证据支持，而不是简单地要求工具“多找点问题”。",
+      "然后确认模型配置、超时时间和其他任务参数。在提交之前，我会复核目标、范围、排除项和运行时设置。如果有不完整的地方，我会明确写清楚，而不是让智能体去猜。提交后，我从任务列表中打开任务详情，跟踪其规划、活动流和工具调用。",
+      "仪表盘提供了任务进度、Token 用量和近期活动的快速概览。使用任务列表定位某次运行，然后打开其详情复核会话、执行过程和工具调用。我首先检查任务是否保持在范围内，然后查看是否有异常活动或需要人工介入的事项。Token 用量有助于估算成本，但其本身并不是衡量任务质量的指标。",
+      "探索视图帮助我们复查任务是如何拆解成不同方向的，以及沿途记录了哪些事实和成果。在复核结论时，我将其溯源至支持它的具体步骤与证据，并检查是否有任何未确认的事项。",
+      "资产页面管理资产及其关联关系，而覆盖率地图展示了任务覆盖了哪些范围内的资产。资产之间的关联关系并不自动代表授权测试所有关联项。导入或发现资产后，在将其纳入任务前必须确认归属与授权。",
+      "如果团队使用 ScopeSentry，资产同步页面可以连接数据源，并按项目或任务导入选定的资产类型（例如域名、子域名、IP、端口、站点或接口）。导入后务必复核范围：出现在平台上的资产并不意味着已获得授权确认。",
+      "在复核执行过程时，我不单看最终摘要。我会检查工具调用和返回内容，核对模型的结论是否有证据支持。当需要复查网络交互时，可以使用流量录制来检查请求和响应，帮助排查执行过程中的问题。",
+      "当某项操作需要人工裁决时，审批功能允许我们在决定是否批准前复核其详细信息。人机交互会话可以补充背景信息、明确限制条件，或者要求智能体暂停并整理已收集的证据。审批和记录支持复查，但它们无法替代操作员的人工判断。",
+      "成果页面汇集了发现的问题和相关证据。在复核期间，我会检查受影响的资产、原始证据、复现条件，以及结论是否与它们一致。如果证据不足，该结果应标记为未确认，而不是作为确认的问题提交。",
+      "为验证修复情况，可以从成果列表或详情页启动手动复测。它会创建一个独立的会话，因此不需要重启原始任务。结果可以是“仍可复现”、“已修复”或“无法确认”。结论、证据和会话记录均予保留，以供后续复查。",
+      "智能体管理用于配置角色提示词、模型和运行时参数。在进行调整之前，先明确你要解决的问题。每次只改动一处，并使用相同的小任务对比结果。这样更容易评估改动是否有效。",
+      "LLM 配置页面用于设置提供商和相关参数。在更改模型或接口后，在广泛使用前先跑一个小检查。系统设置管理全局运行时参数，因此在更改前要考虑对正在运行的任务的影响。后端日志有助于排查服务和任务执行问题。",
+      "版本更新也是日常维护的一部分。更新前请阅读发行说明并备份相关数据。更新可能会重启服务并中断正在运行的任务，因此请选择合适的维护窗口。",
+      "总的来说，工作流程是：定义任务和范围，跟进探索路径和工具调用，然后复核成果与证据。需要时，通过审批、人机交互会话或复测进行深入。",
+      "评分表是从实践经验中总结出的一套辅助方法。它有助于使任务目标更明确、执行更聚焦，但它不能替代范围确认、证据复核或人工判断。最终结论必须始终建立在授权边界和真实证据之上。",
+      "最后一点说明：在使用平台之前，请检查当前版本的使用说明和安全限制。我们查阅的文档限制在隔离的本地环境中使用，并禁止对在线系统进行扫描、探测或利用。如果部署的版本保留了此限制，则操作和演示都必须严格保持在该边界之内。"
+    ],
+    "gloss": [
+      [
+        "penetration-testing",
+        "n.",
+        "the practice of authorized security testing to identify system vulnerabilities"
+      ],
+      [
+        "vulnerability",
+        "n.",
+        "a security flaw or weakness in software that can be exploited by attackers"
+      ],
+      [
+        "false-positive",
+        "n.",
+        "a test result that incorrectly indicates the presence of a vulnerability"
+      ],
+      [
+        "endpoint",
+        "n.",
+        "a specific URL or communication interface exposed by a server or Web API"
+      ],
+      [
+        "subdomain",
+        "n.",
+        "a domain name that is part of a larger, primary domain"
+      ],
+      [
+        "reproduce",
+        "v.",
+        "to duplicate or demonstrate a reported vulnerability under specific conditions"
+      ],
+      [
+        "retesting",
+        "n.",
+        "the process of testing a previously identified flaw to verify if it has been remediated"
+      ],
+      [
+        "in-scope",
+        "adj.",
+        "officially authorized and included within the defined test boundaries"
+      ],
+      [
+        "exclusion",
+        "n.",
+        "a target or test method specifically prohibited from assessment activities"
+      ]
+    ]
+  }
+]

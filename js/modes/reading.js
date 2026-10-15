@@ -4,7 +4,7 @@
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { AdvanceClock } from '../auto-advance.js';
-import { lookupFromEvent } from '../lookup.js';
+import { lookupFromEvent, closeLookup } from '../lookup.js';
 import { attachSwipe } from '../swipe.js';
 import { get, update, addXP } from '../store.js';
 import { addCard } from '../srs.js';
@@ -57,10 +57,65 @@ export function renderReading(root) {
     if (voa.getAttribute('src') !== art.audio) voa.src = art.audio;
     voa.play().catch(() => { toast('VOA audio unavailable — using Dean'); readParagraph(); });
   }
-  function readParagraph() {
+  let activeSentSpan = null;
+  let readingSeq = 0;
+
+  function clearActiveSent() {
+    if (activeSentSpan) {
+      activeSentSpan.classList.remove('playing');
+      activeSentSpan = null;
+    }
+    const all = body?.querySelectorAll('.rd-sent.playing') || [];
+    for (const el of all) el.classList.remove('playing');
+  }
+
+  function setActiveSent(span) {
+    clearActiveSent();
+    if (span) {
+      span.classList.add('playing');
+      activeSentSpan = span;
+    }
+  }
+
+  async function playSentence(s, span) {
     stopVoa();
+    closeLookup();
     if (!ttsAvailable()) return toast('No English voice available');
-    speakSequence(art.paras[pos]);
+    const mySeq = ++readingSeq;
+    setActiveSent(span);
+    try {
+      await speak(s);
+    } finally {
+      if (readingSeq === mySeq) clearActiveSent();
+    }
+  }
+
+  async function readParagraph() {
+    stopVoa();
+    closeLookup();
+    if (!ttsAvailable()) return toast('No English voice available');
+    // 如果正在逐句朗读当前段落，再次点击则停止
+    if (readingSeq > 0 && activeSentSpan) {
+      readingSeq++;
+      stopSpeak();
+      clearActiveSent();
+      return;
+    }
+    const mySeq = ++readingSeq;
+    const spans = body.querySelectorAll('.rd-sent');
+    const list = art.paras[pos];
+    for (let i = 0; i < list.length; i++) {
+      if (!alive || readingSeq !== mySeq) break;
+      setActiveSent(spans[i]);
+      const ok = await speak(list[i]);
+      if (!ok || readingSeq !== mySeq) break;
+      if (i < list.length - 1) {
+        clearActiveSent();
+        await new Promise(r => setTimeout(r, 350));
+        if (readingSeq !== mySeq) break;
+      }
+    }
+    if (readingSeq === mySeq) clearActiveSent();
   }
 
   const countdown = h('span', { class: 'chip' });
@@ -107,6 +162,9 @@ export function renderReading(root) {
   }
 
   function open(a, p = null, dir = 'jump') {
+    readingSeq++;
+    clearActiveSent();
+    stopSpeak();
     if (art?.id !== a.id) { stopVoa(); voa.removeAttribute('src'); }
     art = a;
     pos = Math.min(Math.max(0, p ?? get().reading.pos[a.id] ?? 0), a.paras.length - 1);
@@ -117,6 +175,8 @@ export function renderReading(root) {
 
   function go(n) {
     if (!art) return;
+    readingSeq++;
+    clearActiveSent();
     stopSpeak();
     if (n >= art.paras.length) return finish();
     if (n < 0) return;
@@ -137,6 +197,8 @@ export function renderReading(root) {
   }
 
   function paint() {
+    readingSeq++;
+    clearActiveSent();
     advance.reset(performance.now());
     progressFill = h('i', {});
     updateCountdown();
@@ -159,9 +221,24 @@ export function renderReading(root) {
     revealBtn.addEventListener('click', toggle);
     zh.addEventListener('click', toggle);
 
-    const para = h('div', { class: 'rd-para', style: `font-size:${sizeFor(text)}rem`, title: 'Tap a sentence to hear it · tap a word for its meaning' },
+    const para = h('div', { class: 'rd-para', style: `font-size:${sizeFor(text)}rem`, title: 'Tap a sentence to hear it · double-tap or long-press a word for meaning' },
       ...sents.flatMap((s, i) => [
-        h('span', { class: 'rd-sent', onclick: e => { stopVoa(); say(s); lookupFromEvent(e); } }, s),
+        h('span', {
+          class: 'rd-sent',
+          onclick: (e) => {
+            e.stopPropagation();
+            playSentence(s, e.currentTarget);
+          },
+          ondblclick: (e) => {
+            e.stopPropagation();
+            lookupFromEvent(e);
+          },
+          oncontextmenu: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            lookupFromEvent(e);
+          },
+        }, s),
         i < sents.length - 1 ? ' ' : null,
       ]));
     voaBtn = a.audio ? h('button', { class: 'sn-pill', onclick: toggleVoa }) : null;
@@ -198,7 +275,7 @@ export function renderReading(root) {
         h('button', { class: 'rd-dot' + (i === pos ? ' on' : i < pos ? ' past' : ''), 'aria-label': `Paragraph ${i + 1}`, onclick: () => go(i) }))),
       gloss,
       h('a', { class: 'rd-src', href: a.url, target: '_blank', rel: 'noopener noreferrer' },
-        `Source: VOA Learning English · ${a.date}`, icon('arrowRight', 14)));
+        `Source: ${a.url.includes('voanews.com') ? 'VOA Learning English' : 'autoPentestProject'} · ${a.date}`, icon('arrowRight', 14)));
     body.append(hero, side);
 
     // 预生成：当前段 + 下一段（都是随站点发布的音频文件，不耗额度）
@@ -240,7 +317,7 @@ export function renderReading(root) {
     };
     const dlg = h('dialog', { class: 'external-dialog rd-lib', 'aria-label': 'Article library' },
       h('h2', {}, 'Article library'),
-      h('p', { class: 'resources-intro' }, `${done().size} of ${DATA.PASSAGES.length} read · from VOA Learning English`),
+      h('p', { class: 'resources-intro' }, `${done().size} of ${DATA.PASSAGES.length} read · VOA Learning English & My articles`),
       chips, list,
       h('div', { class: 'btn-row' }, h('button', { class: 'btn ghost', onclick: close }, 'Close')));
     dlg.addEventListener('cancel', e => { e.preventDefault(); close(); });
@@ -287,7 +364,7 @@ export function renderReading(root) {
     .catch(e => { sub.textContent = 'Could not load articles: ' + e.message; });
 
   return () => {
-    alive = false; clearInterval(advanceInterval); stopSpeak();
+    alive = false; readingSeq++; clearActiveSent(); clearInterval(advanceInterval); stopSpeak();
     voa.pause(); voa.removeAttribute('src');
     delete document.documentElement.dataset.speaking;
     document.removeEventListener('keydown', onKey);
