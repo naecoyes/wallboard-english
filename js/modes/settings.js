@@ -1,7 +1,7 @@
 // settings.js — 设置与数据备份（iOS 风格分组列表）
 import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
-import { get, update, exportJSON, importJSON } from '../store.js';
+import { get, update, exportJSON, importJSON, currentUserId, USERS } from '../store.js';
 import {
   englishVoices, speak, ttsAvailable, ttsEngine, testMimo, MIMO_VOICES,
   localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady, staticAudioReady, staticAudioInfo,
@@ -333,13 +333,17 @@ export function renderSettings(root) {
     h('div', { class: 'row stack' },
       h('div', { class: 'row-top' },
         h('span', { class: 'r-ico c-rose' }, icon('upload', 20)),
-        h('div', { class: 'r-label' }, 'Import backup', h('small', {}, 'Replaces all current data on this device'))),
+        h('div', { class: 'r-label' }, 'Import backup', h('small', {}, 'New backups restore both learners; old backups replace only the selected learner. API keys stay on this device.'))),
       importBox,
       h('div', { class: 'btn-row', style: 'margin-top:4px' },
         h('span', { class: 'spacer' }),
         h('button', {
           class: 'btn sm danger', onclick: () => {
             if (!importBox.value.trim()) return toast('Paste a backup first');
+            let backup;
+            try { backup = JSON.parse(importBox.value); } catch { return toast('Invalid backup JSON'); }
+            const target = USERS.find(u => u.id === currentUserId()).name;
+            if (!confirm(backup.format === 2 ? 'Replace both learners with this backup?' : `Import old backup into ${target}? The other learner is kept.`)) return;
             const r = importJSON(importBox.value);
             if (r.ok) { toast('Backup imported'); setTimeout(() => location.hash = '#standby', 800); }
             else toast('Import failed: ' + r.error);

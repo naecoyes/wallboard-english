@@ -42,7 +42,7 @@ function flush() {
         rec = { timerId: id, studyDay: day, date: new Date().toISOString(), mode: c.mode, seconds: 0, minutes: 0, result: '' };
         s.sessions.push(rec);
       }
-      rec.seconds = Math.floor(ms / 1000);
+      rec.seconds = Math.max(rec.seconds || 0, Math.floor(ms / 1000));
       rec.minutes = rec.seconds / 60;
     }
     s.sessions = compactSessions(s.sessions);
@@ -55,6 +55,7 @@ export function startStudyTimer(mode) {
     clock: new ActiveClock(now(), !document.hidden, Infinity), buckets: new Map(),
   } : null;
 }
+export function stopStudyTimer() { flush(); current = null; }
 export function studySeconds() { sample(); return current ? current.clock.total / 1000 : 0; }
 export function pauseStudyTimer(paused) { sample(); current?.clock.pause(now(), paused); flush(); }
 export function finishStudyResult(result) {

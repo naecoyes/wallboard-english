@@ -1,10 +1,10 @@
 import { h, toast } from './ui.js';
-import { get, update, compactSessions } from './store.js';
+import { get, update, compactSessions, currentUserId, getUserState, replaceState } from './store.js';
 import { pauseStudyTimer, formatStudyTime } from './study-timer.js';
 
 const KEY = 'wallboard-external-v1';
 let pending = null;
-try { pending = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
+try { pending = JSON.parse(localStorage.getItem(KEY) || 'null'); if (pending) pending.userId ||= 'male'; } catch {}
 let dialog = null;
 let banner = null;
 export const externalStudyActive = () => !!pending;
@@ -25,14 +25,17 @@ function modal(title, ...children) {
 function finish(seconds) {
   const p = pending;
   if (!p) return;
-  if (seconds > 0) update(s => {
+  if (seconds > 0) {
+    const s = structuredClone(getUserState(p.userId));
     const id = `external:${p.id}`;
     if (!s.sessions.some(r => r.timerId === id)) s.sessions.push({
       timerId: id, date: new Date(p.startedAt).toISOString(), mode: 'external',
       seconds, minutes: seconds / 60, result: p.title, resourceUrl: p.url,
     });
     s.sessions = compactSessions(s.sessions);
-  });
+    s.updatedAt = Date.now();
+    replaceState(s, { userId: p.userId });
+  }
   pending = null; persist(); closeDialog(); pauseStudyTimer(false);
   window.dispatchEvent(new Event('hashchange'));
   toast(seconds > 0 ? `Saved ${formatStudyTime(seconds)} of external study` : 'External session discarded');
@@ -79,7 +82,7 @@ export function openExternalStudy(title, url) {
       h('button', { class: 'btn ghost', onclick: closeDialog }, 'Cancel'),
       h('a', { class: 'btn ghost', href: url, target: '_blank', rel: 'noopener noreferrer', onclick: closeDialog }, 'Open without timing'),
       h('button', { class: 'btn primary', onclick: () => {
-        pending = { id: crypto.randomUUID(), title, url, plannedMinutes: Number(plan.value), startedAt: Date.now(), endedAt: null };
+        pending = { id: crypto.randomUUID(), userId: currentUserId(), title, url, plannedMinutes: Number(plan.value), startedAt: Date.now(), endedAt: null };
         pauseStudyTimer(true); persist(); closeDialog();
         // Open during the click gesture so browsers can allow the new tab.
         const tab = window.open(url, '_blank');

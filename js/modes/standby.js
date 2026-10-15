@@ -1,4 +1,5 @@
 import { sessionDay, sessionSeconds } from '../study-timer.js';
+import { createLearningTree } from '../learning-tree.js';
 // standby.js — 今日仪表盘（横屏一屏放下）
 // 左：问候 + 绿色「每日短语」主卡 + 今天的学习路线；右：时钟/目标、连续学习、本周节奏、该复习了、小提醒
 // 所有数字都来自真实学习记录（sessions / 卡组 / 打卡），不是手动勾选
@@ -260,17 +261,19 @@ function build(root) {
       h('div', { class: 'bulb' }, icon('bulb', 18)),
       h('div', {}, h('strong', {}, 'Tip of the day'), h('p', {}, TIPS[hashOf(today) % TIPS.length])));
 
+  const tree = createLearningTree(s);
   const wrap = h('div', { class: 'ec-dash' },
     greet,
     h('main', { class: 'ec-grid' },
       h('div', { class: 'ec-col' }, hero, route, tip),
-      h('aside', { class: 'ec-col' }, stats, weekly, review)),
+      h('aside', { class: 'ec-col' }, stats, weekly, review, tree.element)),
     null);
   root.append(wrap);
 
   const tick = () => {
     const n = new Date();
     clockEl.textContent = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`;
+    tree.update(get());
   };
   tick();
   return { tick, key: stateKey() };

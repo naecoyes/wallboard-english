@@ -1,5 +1,8 @@
 // app.js — 入口：路由、待机自动返回、初始卡组、Wake Lock、SW 注册
-import { get, update } from './store.js';
+import { get, update, switchUser } from './store.js';
+import { initUserPicker } from './user-picker.js';
+import { stopSpeak } from './tts.js';
+import { closeLookup } from './lookup.js';
 import { SEED_DECK } from './content.js';
 import { newCard } from './srs.js';
 import { initWakeLock } from './wakelock.js';
@@ -9,7 +12,7 @@ import { initFullscreen } from './fullscreen.js';
 import { initSync } from './sync.js';
 import { initExternalStudy, externalStudyActive } from './external-study.js';
 import { pauseStudyTimer } from './study-timer.js';
-import { initStudyTimer, startStudyTimer } from './study-timer.js';
+import { initStudyTimer, startStudyTimer, stopStudyTimer } from './study-timer.js';
 import { renderStandby } from './modes/standby.js';
 import { renderMicro } from './modes/micro.js';
 import { renderFocus } from './modes/focus.js';
@@ -19,12 +22,13 @@ import { renderSentences } from './modes/sentences.js';
 import { renderReading } from './modes/reading.js';
 
 // ---------- 首次运行：导入初始卡组 ----------
-if (!get().seeded) {
-  update(s => {
+function seedUser() {
+  if (!get().seeded) update(s => {
     for (const c of SEED_DECK) s.cards.push(newCard(c.front, c.back, c.example));
     s.seeded = true;
   });
 }
+seedUser();
 
 // ---------- 顶栏图标 ----------
 document.querySelectorAll('#topbar [data-icon]').forEach(a =>
@@ -111,3 +115,21 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 if (!location.hash) location.hash = '#standby';
 route();
 initExternalStudy();
+initUserPicker(id => {
+  if (externalStudyActive()) {
+    alert('Please finish or discard the external study session before switching learners.');
+    return false;
+  }
+  const name = (location.hash || '#standby').slice(1);
+  if (['micro', 'focus'].includes(name) && !confirm('End this practice and switch learners? Study time will be saved; unfinished rewards are not granted.')) return false;
+  if (cleanup) { cleanup(); cleanup = null; }
+  stopStudyTimer(); stopSpeak(); closeLookup();
+  document.querySelectorAll('dialog').forEach(d => d.remove());
+  try { switchUser(id); } catch (e) {
+    alert(`Could not save learner switch: ${e.message}`); route(); return false;
+  }
+  seedUser();
+  applyTheme();
+  route();
+  return true;
+});

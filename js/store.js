@@ -35,17 +35,65 @@ const defaults = () => ({
   seeded: false,
 });
 
-let state = load();
+export const USERS = [{ id: 'male', name: '男生', avatar: '👨' }, { id: 'female', name: '女生', avatar: '👩' }];
+let activeUser = 'male';
+let users = { male: defaults(), female: defaults() };
+try {
+  const data = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (data?.format === 2 && data.users) {
+    for (const { id } of USERS) users[id] = migrate(data.users[id] || {});
+    activeUser = data.activeUser === 'female' ? 'female' : 'male';
+    for (const { id } of USERS) {
+      users[id].settings = { ...defaults().settings, ...data.settings };
+      users[id].settingsAt = data.settingsAt || 0;
+    }
+  } else if (data) users.male = migrate(data);
+} catch (e) { console.warn('Could not read saved data', e); }
+let state = users[activeUser];
+for (const { id } of USERS) users[id].settings = state.settings;
 
-function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults();
-    return migrate(JSON.parse(raw));
-  } catch (e) {
-    console.warn('Could not read saved data, starting fresh', e);
-    return defaults();
+export const currentUserId = () => activeUser;
+export const getUserState = (id) => {
+  const disk = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (id !== activeUser && disk?.format === 2 && (disk.users?.[id]?.updatedAt || 0) > (users[id]?.updatedAt || 0)) {
+    users[id] = migrate(disk.users[id]);
+    users[id].settings = state.settings;
+    users[id].settingsAt = state.settingsAt || 0;
   }
+  return users[id];
+};
+function persist() {
+  // A second tab may be studying as the other learner. Never overwrite its newer snapshot.
+  const disk = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (disk?.format === 2) {
+    for (const { id } of USERS) {
+      if (id !== activeUser && (disk.users?.[id]?.updatedAt || 0) > (users[id].updatedAt || 0)) users[id] = migrate(disk.users[id]);
+    }
+    if ((disk.settingsAt || 0) > (state.settingsAt || 0)) {
+      for (const { id } of USERS) { users[id].settings = { ...defaults().settings, ...disk.settings }; users[id].settingsAt = disk.settingsAt; }
+    }
+  }
+  for (const { id } of USERS) { users[id].settings = state.settings; users[id].settingsAt = state.settingsAt || 0; }
+  localStorage.setItem(KEY, JSON.stringify({ format: 2, activeUser, users, settings: state.settings, settingsAt: state.settingsAt || 0 }));
+}
+export function switchUser(id) {
+  if (!USERS.some(u => u.id === id)) throw new Error('Unknown user');
+  save(true);
+  const previousId = activeUser;
+  activeUser = id;
+  state = users[id];
+  resetSnapshots();
+  try { persist(); } catch (e) {
+    activeUser = previousId; state = users[activeUser]; resetSnapshots(); throw e;
+  }
+}
+export function renameUser(id, name) {
+  if (!users[id]) return;
+  getUserState(id);
+  users[id].profile.nickname = name.trim().slice(0, 24);
+  users[id].updatedAt = Date.now();
+  persist();
+  saveHooks.forEach(f => f());
 }
 
 function migrate(data) {
@@ -109,7 +157,11 @@ let settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
 /** 设置变化时记录时间，同步时用来判断哪台设备的设置更新 */
 function touchSettings() {
   const snap = JSON.stringify({ ...state.settings, mimoKey: '' });
-  if (snap !== settingsSnap) { settingsSnap = snap; state.settingsAt = Date.now(); }
+  if (snap !== settingsSnap) {
+    settingsSnap = snap;
+    const at = Date.now();
+    for (const { id } of USERS) { users[id].settings = state.settings; users[id].settingsAt = at; }
+  }
 }
 
 let contentSnap = JSON.stringify({ ...state, updatedAt: 0 });
@@ -126,17 +178,28 @@ export function save(silent = false) {
   touchSettings();
   const changed = touchContent();
   if (!changed && !silent) return;
-  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  try { persist(); }
   catch (e) { console.warn('Save failed', e); }
   if (!silent) saveHooks.forEach(f => f());
 }
 
 /** 用合并后的数据整体替换（同步用） */
-export function replaceState(next, { silent = false } = {}) {
-  state = migrate(next);
+function resetSnapshots() {
   settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
-  contentSnap = JSON.stringify({ ...state, updatedAt: 0 }); // 同步写入不算本机改动
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('Save failed', e); }
+  contentSnap = JSON.stringify({ ...state, updatedAt: 0 });
+}
+export function replaceState(next, { silent = false, userId = activeUser } = {}) {
+  if (!users[userId]) throw new Error('Unknown user');
+  const replacement = migrate(next);
+  const shared = (replacement.settingsAt || 0) > (state.settingsAt || 0)
+    ? { ...replacement.settings, mimoKey: state.settings.mimoKey || replacement.settings.mimoKey }
+    : state.settings;
+  const settingsAt = Math.max(replacement.settingsAt || 0, state.settingsAt || 0);
+  users[userId] = replacement;
+  for (const { id } of USERS) { users[id].settings = shared; users[id].settingsAt = settingsAt; }
+  state = users[activeUser];
+  resetSnapshots();
+  try { persist(); } catch (e) { console.warn('Save failed', e); }
   if (!silent) saveHooks.forEach(f => f());
 }
 
@@ -160,22 +223,43 @@ export function logSession(mode, minutes, result) {
 
 /** 导出备份：去掉 API Key，避免备份文件泄露密钥 */
 export function exportJSON() {
-  const copy = JSON.parse(JSON.stringify(state));
+  for (const { id } of USERS) getUserState(id);
+  const copy = JSON.parse(JSON.stringify({ format: 2, users, settings: state.settings, settingsAt: state.settingsAt || 0 }));
   copy.settings.mimoKey = '';
+  for (const user of Object.values(copy.users)) user.settings.mimoKey = '';
   return JSON.stringify(copy, null, 2);
 }
 
 /** 导入 JSON，返回 {ok, error} */
 export function importJSON(text) {
+  const previous = structuredClone(users);
   try {
     const data = JSON.parse(text);
     if (typeof data !== 'object' || data === null) throw new Error('Not a valid backup object');
     const keepKey = state.settings.mimoKey;
-    state = migrate(data);
-    if (!state.settings.mimoKey) state.settings.mimoKey = keepKey; // 备份里没有 Key 时保留本机的
-    save();
+    if (data.format === 2) {
+      if (!data.users?.male || !data.users?.female) throw new Error('Backup must contain both users');
+      const restored = {};
+      for (const { id } of USERS) restored[id] = migrate(data.users[id]);
+      const settings = { ...defaults().settings, ...data.settings, mimoKey: keepKey };
+      for (const { id } of USERS) { restored[id].settings = settings; restored[id].settingsAt = Date.now(); restored[id].updatedAt = Date.now(); }
+      users = restored;
+      state = users[activeUser];
+    } else {
+      users[activeUser] = migrate(data);
+      state = users[activeUser];
+      state.settings.mimoKey = keepKey;
+      for (const { id } of USERS) users[id].settings = state.settings;
+    }
+    const restoredAt = Date.now();
+    state.updatedAt = restoredAt;
+    for (const { id } of USERS) users[id].settingsAt = restoredAt;
+    resetSnapshots();
+    persist();
+    saveHooks.forEach(f => f());
     return { ok: true };
   } catch (e) {
+    users = previous; state = users[activeUser]; resetSnapshots();
     return { ok: false, error: String(e.message || e) };
   }
 }

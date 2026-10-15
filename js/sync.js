@@ -1,13 +1,17 @@
 // sync.js — 把学习进度同步到私有 GitHub 仓库（纯前端，无后台）
-// · 仓库里只有一个 progress.json；GitHub Token 用口令加密（PBKDF2 → AES-GCM）后存在本机
+// · Two profile files: progress-male.json / progress-female.json; legacy progress.json is read only during migration.
 // · 口令派生出的密钥以「不可导出」形式存进 IndexedDB，本机重启后自动解锁；Token 明文只在内存里
 // · MiMo Key 也用同一把密钥加密后放进 progress.json，多台设备共用
-import { get, replaceState, onSave, compactSessions } from './store.js';
+import { get, getUserState, currentUserId, USERS, replaceState, onSave, compactSessions } from './store.js';
 
 const CFG = 'wallboard-sync-v1';
-const FILE = 'progress.json';
+const fileFor = id => `progress-${id}.json`;
 const b64 = {
-  enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))),
+  enc: (buf) => {
+    const bytes = new Uint8Array(buf); let text = '';
+    for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    return btoa(text);
+  },
   dec: (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0)),
 };
 const utf8 = (s) => new TextEncoder().encode(s);
@@ -60,15 +64,15 @@ async function gh(path, opts = {}) {
   if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; throw e; }
   return r.json();
 }
-async function readRemote() {
-  const f = await gh(FILE);
+async function readRemote(file) {
+  const f = await gh(file);
   if (!f) return { sha: null, data: null };
   const bin = atob(f.content.replace(/\n/g, ''));
   return { sha: f.sha, data: JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))) };
 }
-async function writeRemote(data, sha) {
+async function writeRemote(data, sha, file) {
   const content = b64.enc(utf8(JSON.stringify(data)));
-  return gh(FILE, { method: 'PUT', body: JSON.stringify({ message: 'sync progress', content, ...(sha ? { sha } : {}) }) });
+  return gh(file, { method: 'PUT', body: JSON.stringify({ message: 'sync progress', content, ...(sha ? { sha } : {}) }) });
 }
 
 // ---------- 合并（单用户：哪边最近改过就以哪边为准，学习记录两边合并不丢） ----------
@@ -89,9 +93,11 @@ export function merge(local, remote, base = null) {
   const localDirty = base != null && (local.updatedAt || 0) > base;
   const takeRemote = remoteChanged && (!localDirty || (remote.updatedAt || 0) > (local.updatedAt || 0));
   const out = JSON.parse(JSON.stringify(takeRemote ? remote : local));
-  out.settings = { ...out.settings, mimoKey: local.settings.mimoKey };
+  const settingsOwner = (remote.settingsAt || 0) > (local.settingsAt || 0) ? remote : local;
+  out.settings = { ...settingsOwner.settings, mimoKey: local.settings.mimoKey };
+  out.settingsAt = settingsOwner.settingsAt || 0;
   out.sessions = mergeSessions(local.sessions, remote.sessions);
-  out.seeded = true;
+  out.seeded = !!out.seeded;
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
@@ -103,27 +109,35 @@ export async function syncNow() {
   if (!token || busy) return;
   busy = true; setState('syncing');
   try {
+    for (const { id: userId } of USERS) {
+    const file = fileFor(userId);
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { sha, data } = await readRemote();
-      const local = get();
+      let { sha, data } = await readRemote(file);
+      if (!data && userId === 'male') {
+        const legacy = await readRemote('progress.json');
+        data = legacy.data; // Retain the legacy file; create a separate male file.
+      }
+      const local = getUserState(userId);
       if (data?.mimoKeyEnc && !local.settings.mimoKey) {
         try { local.settings.mimoKey = await decrypt(data.mimoKeyEnc); } catch { /* 口令不一致则忽略 */ }
       }
-      const merged = merge(local, data?.state, cfg.base ?? null);
-      const changed = !data || JSON.stringify(data.state) !== JSON.stringify(strip(merged));
+      const merged = merge(local, data?.state, cfg.bases?.[userId] ?? (userId === 'male' ? cfg.base : null) ?? null);
+      const changed = !sha || !data || JSON.stringify(data.state) !== JSON.stringify(strip(merged));
       if (changed) merged.updatedAt = Math.max(Date.now(), merged.updatedAt); // 写回云端的版本比两边都新
       const localChanged = JSON.stringify(strip(local)) !== JSON.stringify(strip(merged));
-      replaceState(merged, { silent: true });
-      if (localChanged) window.dispatchEvent(new CustomEvent('wallboard:remote-updated'));
+      replaceState(merged, { silent: true, userId });
+      if (localChanged && currentUserId() === userId) window.dispatchEvent(new CustomEvent('wallboard:remote-updated'));
       if (changed) {
         const body = {
           v: 2, salt: cfg.salt, check: data?.check || await encrypt('ok'), state: strip(merged),
           ...(merged.settings.mimoKey ? { mimoKeyEnc: await encrypt(merged.settings.mimoKey) } : {}),
         };
-        try { await writeRemote(body, sha); } catch (e) { if ((e.status !== 409 && e.status !== 422) || attempt) throw e; continue; }
+        try { await writeRemote(body, sha, file); } catch (e) { if ((e.status !== 409 && e.status !== 422) || attempt) throw e; continue; }
       }
-      cfg.base = merged.updatedAt; saveCfg();
+      cfg.bases ||= {};
+      cfg.bases[userId] = merged.updatedAt; saveCfg();
       break;
+    }
     }
     syncState.last = Date.now(); setState('ok');
   } catch (e) {
@@ -139,7 +153,11 @@ export async function connect({ repo, tokenText, pass }) {
   const probe = { repo };
   cfg = probe; token = tokenText.trim();
   let remote;
-  try { remote = await readRemote(); } catch (e) { cfg = null; token = null; throw new Error(e.status === 401 ? 'Token rejected by GitHub' : e.status === 403 ? 'Token has no access to that repo' : e.message); }
+  try {
+    remote = await readRemote(fileFor('male'));
+    if (!remote.data) remote = await readRemote(fileFor('female'));
+    if (!remote.data) remote = await readRemote('progress.json');
+  } catch (e) { cfg = null; token = null; throw new Error(e.status === 401 ? 'Token rejected by GitHub' : e.status === 403 ? 'Token has no access to that repo' : e.message); }
   const salt = remote.data?.salt ? b64.dec(remote.data.salt) : crypto.getRandomValues(new Uint8Array(16));
   key = await derive(pass, salt);
   if (remote.data?.check) { try { await decrypt(remote.data.check); } catch { cfg = null; token = null; key = null; throw new Error('Wrong passphrase for the existing data'); } }
