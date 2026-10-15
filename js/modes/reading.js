@@ -54,12 +54,22 @@ export function renderReading(root) {
   }
   function toggleVoa() {
     if (voaPlaying()) { stopVoa(); return; }
+    readingSeq++;
+    clearActiveSent();
     stopSpeak();
     if (voa.getAttribute('src') !== art.audio) voa.src = art.audio;
     voa.play().catch(() => { toast('VOA audio unavailable — using Dean'); readParagraph(); });
   }
   let activeSentSpan = null;
   let readingSeq = 0;
+  let paragraphRun = null;
+
+  function autoReadParagraph() {
+    const expected = readingSeq;
+    Promise.resolve().then(() => {
+      if (alive && expected === readingSeq && !document.hidden && !voaPlaying()) readParagraph({ auto: true });
+    });
+  }
 
   function clearActiveSent() {
     if (activeSentSpan) {
@@ -91,10 +101,11 @@ export function renderReading(root) {
     }
   }
 
-  async function readParagraph() {
+  async function readParagraph({ auto = false } = {}) {
+    if (!art || document.hidden) return;
     stopVoa();
     closeLookup();
-    if (!ttsAvailable()) return toast('No English voice available');
+    if (!ttsAvailable()) return auto ? false : toast('No English voice available');
     // 如果正在逐句朗读当前段落，再次点击则停止
     if (readingSeq > 0 && activeSentSpan) {
       readingSeq++;
@@ -103,12 +114,13 @@ export function renderReading(root) {
       return;
     }
     const mySeq = ++readingSeq;
+    paragraphRun = mySeq;
     const spans = body.querySelectorAll('.rd-sent');
     const list = art.paras[pos];
     for (let i = 0; i < list.length; i++) {
-      if (!alive || readingSeq !== mySeq) break;
+      if (!alive || document.hidden || readingSeq !== mySeq) break;
       setActiveSent(spans[i]);
-      const ok = await speak(list[i]);
+      const ok = await speak(list[i], { auto });
       if (!ok || readingSeq !== mySeq) break;
       if (i < list.length - 1) {
         clearActiveSent();
@@ -116,7 +128,11 @@ export function renderReading(root) {
         if (readingSeq !== mySeq) break;
       }
     }
-    if (readingSeq === mySeq) clearActiveSent();
+    if (paragraphRun === mySeq) paragraphRun = null;
+    if (readingSeq === mySeq) {
+      clearActiveSent();
+      advance.reset(performance.now());
+    }
   }
 
   const countdown = h('span', { class: 'chip' });
@@ -172,6 +188,7 @@ export function renderReading(root) {
     update(s => { s.reading.id = a.id; s.reading.pos[a.id] = pos; });
     body.dataset.dir = dir;
     paint();
+    autoReadParagraph();
   }
 
   function go(n) {
@@ -185,6 +202,7 @@ export function renderReading(root) {
     pos = n;
     update(s => { s.reading.pos[art.id] = pos; });
     paint();
+    autoReadParagraph();
   }
 
   function finish() {
@@ -361,7 +379,7 @@ export function renderReading(root) {
   const resetCountdown = () => { advance.reset(performance.now()); updateCountdown(); };
   const onVisibility = () => {
     advance.setVisible(performance.now(), !document.hidden);
-    if (document.hidden) { stopSpeak(); stopVoa(); }
+    if (document.hidden) { readingSeq++; clearActiveSent(); stopSpeak(); stopVoa(); }
     updateCountdown();
   };
   wrap.addEventListener('pointerdown', resetCountdown);
@@ -370,7 +388,7 @@ export function renderReading(root) {
   document.addEventListener('visibilitychange', onVisibility);
   const advanceInterval = setInterval(() => {
     // VOA 原声播放时不自动翻段
-    if (!art || voaPlaying()) { advance.reset(performance.now()); updateCountdown(); return; }
+    if (!art || voaPlaying() || paragraphRun === readingSeq || activeSentSpan) { advance.reset(performance.now()); updateCountdown(); return; }
     if (advance.tick(performance.now())) go(pos + 1);
     updateCountdown();
   }, 250);
