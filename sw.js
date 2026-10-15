@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v41'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v42'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 // 词库 / 句库（约 1.7 MB）单独缓存：改界面升级版本号时不必重新下载，后台静默更新
 const DATA_CACHE = 'wallboard-data-v4';
 const DATA_FILES = ['./js/words.js', './js/sentences.js', './js/passages.js'];
@@ -41,7 +41,7 @@ const ASSETS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(Promise.all([
-    caches.open(CACHE).then(c => c.addAll(ASSETS)),
+    caches.open(CACHE).then(c => c.addAll(ASSETS.map(path => new Request(path, { cache: 'reload' })))),
     caches.open(DATA_CACHE).then(c => Promise.all(DATA_FILES.map(f => c.match(f).then(hit => hit || c.add(f))))),
   ]).then(() => self.skipWaiting()));
 });
@@ -78,6 +78,17 @@ self.addEventListener('fetch', e => {
       const net = fetch(e.request).then(res => { if (res.ok) c.put(e.request, res.clone()); return res; });
       return hit || net;
     })));
+    return;
+  }
+  // Always refresh the document and runtime code online; retain offline fallback.
+  if (url.origin === self.location.origin && (e.request.mode === 'navigate' || /\.(?:js|css)$/.test(url.pathname))) {
+    e.respondWith(fetch(new Request(e.request, { cache: 'no-cache' })).then(res => {
+      if (res.ok) {
+        const copy = res.clone();
+        e.waitUntil(caches.open(CACHE).then(c => c.put(e.request, copy)));
+      }
+      return res;
+    }).catch(() => caches.match(e.request).then(hit => hit || (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()))));
     return;
   }
   e.respondWith(

@@ -96,7 +96,16 @@ initWakeLock();
 
 // Service Worker（离线缓存；file:// 下自动跳过）
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW registration failed', e));
+  const hadController = !!navigator.serviceWorker.controller;
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+    .then(registration => registration.update())
+    .catch(e => console.warn('SW registration failed', e));
 }
 
 if (!location.hash) location.hash = '#standby';

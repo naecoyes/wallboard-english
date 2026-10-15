@@ -314,7 +314,7 @@ export function renderReading(root) {
       : h('p', { class: 'rd-empty' }, 'No dictionary entries for this paragraph.');
     const side = h('section', { class: 'wm-card glass rd-side' },
       h('div', { class: 'wm-card-head' },
-        h('span', { class: 'wm-label' }, `WORDS ON THIS PAGE · ${pageWords.length}`),
+        h('span', { class: 'wm-label' }, `WORDS ON THIS PAGE · ¶ ${pos + 1} · ${pageWords.length} words`),
         h('span', { class: 'chip' + (done().has(a.id) ? ' green' : '') }, done().has(a.id) ? 'Read ✓' : `${a.words} words`)),
       h('div', { class: 'rd-progress' }, ...a.paras.map((_, i) =>
         h('button', { class: 'rd-dot' + (i === pos ? ' on' : i < pos ? ' past' : ''), 'aria-label': `Paragraph ${i + 1}`, onclick: () => go(i) }))),
