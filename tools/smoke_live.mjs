@@ -16,7 +16,7 @@ try {
     await b.evaluate(`location.hash='#${route}'`);await delay(400);
     assert.ok(await b.evaluate('!!document.querySelector("#screen > *")'),route+' empty');
   }
-  await b.send('Page.reload',{ignoreCache:true});
+  await b.send('Page.reload'); // A force reload deliberately bypasses service-worker control.
   await b.waitFor('!!document.querySelector(".settings")',30000);
   await b.waitFor('!!navigator.serviceWorker.controller',10000);
   await b.send('Network.enable');
