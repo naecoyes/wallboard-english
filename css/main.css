@@ -695,6 +695,66 @@ html[data-theme="dark"] .answer { color: var(--ink); }
 .rd-lib-item.on { background: var(--mint); }
 .rd-lib-item:active { background: rgba(var(--tint), .06); }
 
+/* ---------- 课堂录音（Lessons） ---------- */
+.ls-head-text { min-width: 0; }
+.ls-head-text h1 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 36rem; }
+.ls-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 1rem; align-content: start; overflow-y: auto; min-height: 0; padding-bottom: 1rem; }
+.ls-card { display: flex; flex-direction: column; gap: .625rem; align-items: flex-start; }
+.ls-card-main { display: flex; flex-direction: column; gap: .25rem; text-align: left; border: none; background: transparent; color: var(--ink); padding: 0; width: 100%; }
+.ls-card-main b { font-size: 1.125rem; font-weight: 850; overflow-wrap: anywhere; }
+.ls-card-main small, .ls-meta { color: var(--muted); font-size: .8125rem; }
+.ls-card-actions { margin-top: auto; width: 100%; }
+.ls-bar { width: 100%; height: .375rem; border-radius: 1rem; background: rgba(var(--tint), .08); overflow: hidden; }
+.ls-bar i { display: block; height: 100%; background: var(--green); border-radius: inherit; transition: width .4s; }
+.ls-err { color: var(--amber); font-size: .8125rem; margin: 0; }
+.ls-note { color: var(--muted); font-size: .875rem; line-height: 1.5; }
+.ls-empty { grid-column: 1 / -1; max-width: 44rem; }
+.ls-empty ol { margin: .75rem 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: .5rem; line-height: 1.45; }
+.ls-dlg label { margin: .75rem 0; }
+.ls-export { display: flex; flex-direction: column; gap: .5rem; }
+.ls-progress { display: flex; flex-direction: column; gap: .875rem; max-width: 44rem; }
+.ls-stage { font-size: 1.375rem; font-weight: 800; }
+.ls-dots { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ls-dot { width: .875rem; height: .875rem; border-radius: .25rem; background: rgba(var(--tint), .1); }
+.ls-dot.done { background: var(--mint); box-shadow: inset 0 0 0 1px var(--green); }
+.ls-dot.done.labeled { background: var(--green); }
+.ls-dot.failed { background: var(--amber); }
+.ls-body { grid-template-columns: 1.4fr 1fr; }
+.ls-main, .ls-notes { display: flex; flex-direction: column; min-height: 0; gap: .625rem; }
+.ls-player { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.ls-audio { flex: 1 1 16rem; min-width: 0; height: 2.5rem; }
+.ls-speeds { display: flex; gap: .25rem; }
+.ls-player .sn-chip { padding: .35rem .65rem; }
+.ls-warn { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .6rem .8rem; border-radius: .75rem; background: var(--yellow-soft); color: var(--ink); font-size: .8125rem; }
+.ls-lines { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: .5rem; margin: 0 -.5rem; padding: .25rem .5rem 1rem; }
+.ls-line { max-width: 86%; padding: .6rem .8rem .7rem; border-radius: 1rem; background: rgba(var(--tint), .04); border: 1px solid transparent; transition: border-color .2s, background .2s; }
+.ls-line.student { align-self: flex-end; background: var(--mint); }
+.ls-line.on { border-color: var(--green); }
+.ls-line-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .2rem; }
+.ls-role { border: none; background: transparent; padding: 0; font-size: .7rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+.ls-line.teacher .ls-role { color: var(--sky); }
+.ls-line.unknown .ls-role { color: var(--muted); }
+.ls-time { border: none; background: transparent; padding: 0; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ls-text { display: block; width: 100%; text-align: left; border: none; background: transparent; padding: 0; color: var(--ink); font-size: 1.0625rem; line-height: 1.45; font-weight: 600; font-family: inherit; }
+.ls-zh { margin-top: .3rem; font-size: .9375rem; color: var(--muted); cursor: pointer; transition: filter .3s; }
+.ls-fix { margin-top: .45rem; padding: .45rem .6rem; border-radius: .6rem; background: var(--paper, #fff); border-left: 3px solid var(--green); font-size: .875rem; }
+.ls-fix div { display: flex; align-items: center; gap: .35rem; color: var(--green); }
+.ls-fix small { display: block; margin-top: .2rem; color: var(--muted); }
+.ls-tabs { flex-wrap: wrap; overflow: visible; }
+.ls-pane { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: .375rem; align-items: flex-start; margin: 0 -.5rem; padding: 0 .5rem .5rem; }
+.ls-sum { margin: 0 0 .5rem; line-height: 1.6; }
+.ls-sum.zh { color: var(--muted); }
+.ls-item { display: flex; flex-direction: column; gap: .2rem; width: 100%; text-align: left; padding: .6rem .7rem; border-radius: .75rem; border: none; background: rgba(var(--tint), .04); color: var(--ink); font-size: .9rem; line-height: 1.4; position: relative; }
+.ls-item small { color: var(--muted); }
+.ls-item em { color: var(--muted); font-weight: 400; font-size: .8rem; }
+.ls-add { padding-right: 2rem; }
+.ls-add > .ico { position: absolute; right: .7rem; top: .8rem; color: var(--green); }
+.ls-add:active { background: var(--mint); }
+.ls-orig { color: var(--muted); text-decoration: line-through; }
+.ls-sugg { font-weight: 800; color: var(--green); }
+.ls-item-actions { display: flex; gap: .375rem; margin-top: .25rem; }
+.ls-item-actions .sn-chip { padding: .3rem .6rem; font-size: .75rem; }
+
 /* ==========================================================
    设置
    ========================================================== */
@@ -787,12 +847,18 @@ textarea.import-box { min-height: 6.5rem; resize: vertical; font-size: .8rem; }
   .wm-side { overflow: visible; }
   .sn-items { max-height: 22rem; }
   .rd-gloss { max-height: 22rem; }
+  .ls-lines { max-height: 60vh; }
+  .ls-pane { max-height: 26rem; }
   .rd-scroll { overflow: visible; }
 }
 @media (orientation: landscape) and (max-height: 560px) {
   .ec-dash { min-height: 0; }
   .word-mode, .focus-layout { height: auto; }
   .wm-side, .focus-main { overflow: visible; }
+}
+@media (min-width: 1101px) and (max-width: 1320px) {
+  .seg, .nav-wrap { gap: .35rem; }
+  .seg a { padding: .66rem .7rem; gap: .35rem; }
 }
 @media (max-width: 1100px) {
   .seg a span { display: none; }

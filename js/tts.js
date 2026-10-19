@@ -86,6 +86,14 @@ function mimoConfig() {
   return { key, voice: s.mimoVoice || 'Dean', endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT };
 }
 
+/** MiMo Key 和接口地址（不管发音用不用 MiMo），课堂录音转写也用这套 */
+export async function mimoAuth() {
+  await ttsConfigReady;
+  const s = get().settings;
+  const key = (s.mimoKey || '').trim() || localKey;
+  return key ? { key, endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT } : null;
+}
+
 /** 当前实际使用的引擎：'mimo' | 'system' | 'none' */
 export function ttsEngine() {
   if (mimoConfig()) return 'mimo';

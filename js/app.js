@@ -20,6 +20,7 @@ import { renderSettings } from './modes/settings.js';
 import { renderWord } from './modes/word.js';
 import { renderSentences } from './modes/sentences.js';
 import { renderReading } from './modes/reading.js';
+import { renderLessons } from './modes/lessons.js';
 
 // ---------- 首次运行：导入初始卡组 ----------
 function seedUser() {
@@ -43,6 +44,7 @@ const ROUTES = {
   word: renderWord,
   sentences: renderSentences,
   reading: renderReading,
+  lessons: renderLessons,
   settings: renderSettings,
 };
 
@@ -83,7 +85,7 @@ function resetIdle() {
   clearTimeout(idleTimer);
   if (externalStudyActive()) return;
   const hash = location.hash || '';
-  if (hash === '#focus' || hash === '#word' || hash === '#sentences' || hash === '#reading') return; // 专注有自己的计时；单词模式本身就是待机内容
+  if (hash === '#focus' || hash === '#word' || hash === '#sentences' || hash === '#reading' || hash === '#lessons') return; // 专注有自己的计时；单词模式本身就是待机内容
   const idleMs = Math.max(1, get().settings.idleMin || 2) * 60 * 1000;
   idleTimer = setTimeout(() => { if (!externalStudyActive()) location.hash = '#word'; }, idleMs);
 }
