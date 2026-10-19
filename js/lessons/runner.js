@@ -1,13 +1,15 @@
-// runner.js — 后台处理流水线（切到别的页面也继续跑）：解码切段 → ASR 转写 → 分说话人 + 翻译 → 复习笔记
+// runner.js — 后台处理流水线（切到别的页面也继续跑）：解码切段 → 转写 → 分说话人 + 翻译 → 复习笔记
+//   Gemini：每段 5 分钟，一次请求拿到带时间戳、分好老师 / 学生、带中文的对话
+//   MiMo：每段 90 秒 ASR 转写，再让文本模型分说话人（时间按字数估算）
 // 每完成一段就存一次 IndexedDB；中途关掉页面，下次打开可从断点继续
-import { get } from '../store.js';
-import { mimoAuth } from '../tts.js';
-import { decodeToPcm, planChunks, wavBytes, base64, RATE } from './audio.js';
-import { transcribe, splitTurns, buildNotes, DEFAULT_LLM } from './api.js';
+import { decodeToPcm, planChunks, wavBytes, base64, RATE, CHUNK_SEC } from './audio.js';
+import { transcribe, splitTurns, buildNotes, geminiTurns } from './api.js';
+import { lessonAuth, modelFor } from './keys.js';
 import { getLesson, putLesson, getAudio, putAudio } from './db.js';
 import { flatten } from './format.js';
 
 const ASR_WORKERS = 2;
+const GEMINI_CHUNK_SEC = 300; // 5 分钟 16 kHz WAV ≈ 9.6 MB，base64 后不超过 Gemini 内联 20 MB 的上限
 const MIN_SPLIT_SEC = 20;
 const jobs = new Map(); // id → { ctl, stage, done, total }
 const subs = new Set();
@@ -15,7 +17,6 @@ const emit = (id) => subs.forEach(fn => { try { fn(id); } catch {} });
 
 export const subscribe = (fn) => { subs.add(fn); return () => subs.delete(fn); };
 export const jobOf = (id) => jobs.get(id) || null;
-export const lessonModel = () => (get().settings.lessonModel || '').trim() || DEFAULT_LLM;
 export function cancel(id) { jobs.get(id)?.ctl.abort(); }
 
 export async function createLesson(file, title) {
@@ -42,10 +43,11 @@ async function run(id) {
   if (!lesson) { jobs.delete(id); return; }
   const save = () => putLesson(lesson).then(() => emit(id));
   try {
-    const auth = await mimoAuth();
-    if (!auth) throw new Fatal('Add your MiMo API key in Settings → Pronunciation first');
-    const model = lessonModel();
-    lesson.status = 'processing'; lesson.error = ''; lesson.model = model;
+    const auth = await lessonAuth();
+    if (!auth) throw new Fatal('Add a Gemini key (Lessons → Options) or a MiMo key (Settings → Pronunciation) first');
+    const gem = auth.provider === 'gemini';
+    const model = modelFor(auth);
+    lesson.status = 'processing'; lesson.error = ''; lesson.model = model; lesson.provider = auth.provider;
     await save();
 
     // ---------- 1. 解码 + 切段 ----------
@@ -57,7 +59,7 @@ async function run(id) {
       catch (e) { throw new Fatal(`This recording could not be decoded (${e.message || e.name}). Try MP3, M4A or WAV, or a shorter file.`); }
       if (!lesson.chunks.length) {
         lesson.duration = pcm.length / RATE;
-        lesson.chunks = planChunks(pcm).map(([start, end]) => ({ start, end, status: 'pending' }));
+        lesson.chunks = planChunks(pcm, gem ? GEMINI_CHUNK_SEC : CHUNK_SEC).map(([start, end]) => ({ start, end, status: 'pending' }));
         await save();
       }
     }
@@ -72,12 +74,20 @@ async function run(id) {
         tried.add(c);
         stage('Transcribing', ...counts());
         try {
-          c.text = await transcribe(auth, base64(wavBytes(pcm, c.start, c.end)), { signal });
-          c.status = 'done'; delete c.error; delete c.turns;
+          const b64 = base64(wavBytes(pcm, c.start, c.end));
+          delete c.turns;
+          if (gem) {
+            const i = lesson.chunks.indexOf(c);
+            const prev = lesson.chunks[i - 1]?.turns?.at(-1) || null;
+            c.turns = (await geminiTurns(auth, model, b64, prev, { signal }))
+              .map(t => ({ ...t, at: Number.isFinite(t.at) ? Math.min(c.end, c.start + Math.max(0, t.at)) : undefined }));
+            c.text = c.turns.map(t => t.text).join(' ');
+          } else c.text = await transcribe(auth, b64, { signal });
+          c.status = 'done'; delete c.error;
           fresh = true;
         } catch (e) {
           if (signal.aborted) throw e;
-          if ([401, 402, 403].includes(e.status)) { ctl.abort(); throw new Fatal(e.message); }
+          if (e.fatal) { ctl.abort(); throw new Fatal(e.message); }
           if (e.tooLong && c.end - c.start > MIN_SPLIT_SEC) {
             const mid = (c.start + c.end) / 2;
             lesson.chunks.splice(lesson.chunks.indexOf(c), 1, { start: c.start, end: mid, status: 'pending' }, { start: mid, end: c.end, status: 'pending' });
@@ -102,7 +112,7 @@ async function run(id) {
         try { c.turns = await splitTurns(auth, model, c.text, prev, { signal }); fresh = true; }
         catch (e) {
           if (signal.aborted) throw e;
-          if ([401, 402, 403].includes(e.status)) throw new Fatal(e.message);
+          if (e.fatal) throw new Fatal(e.message);
           lesson.error = `Speaker labels failed for part of the lesson: ${e.message}`;
         }
         await save();
@@ -117,7 +127,7 @@ async function run(id) {
       try { lesson.notes = await buildNotes(auth, model, flatten(lesson), { signal }); lesson.notesError = ''; }
       catch (e) {
         if (signal.aborted) throw e;
-        if ([401, 402, 403].includes(e.status)) throw new Fatal(e.message);
+        if (e.fatal) throw new Fatal(e.message);
         lesson.notesError = e.message;
       }
     }

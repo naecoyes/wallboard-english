@@ -1,7 +1,7 @@
 // format.js — 课堂记录的整理与导出（纯函数，Node 单测可直接引用）
 export const ROLE = { teacher: 'Teacher', student: 'Student', unknown: 'Speaker' };
 
-/** 各段的发言摊平成一条时间线；段内时间按字数比例估算（MiMo ASR 不给逐句时间戳） */
+/** 各段的发言摊平成一条时间线（MiMo ASR 不给逐句时间戳，这时段内按字数比例估算） */
 export function flatten(lesson) {
   const out = [];
   (lesson.chunks || []).forEach((c, ci) => {
@@ -9,7 +9,11 @@ export function flatten(lesson) {
     const total = turns.reduce((n, t) => n + t.text.length, 0) || 1;
     let acc = 0;
     turns.forEach((t, ti) => {
-      out.push({ ...t, chunk: ci, idx: ti, start: c.start + (c.end - c.start) * acc / total });
+      // Gemini 给了时间戳就用（保证不倒退），否则按字数在本段内估算
+      const est = c.start + (c.end - c.start) * acc / total;
+      const prev = out.length ? out[out.length - 1].start : 0;
+      const start = Number.isFinite(t.at) ? Math.max(prev, Math.min(c.end, t.at)) : est;
+      out.push({ ...t, chunk: ci, idx: ti, start });
       acc += t.text.length;
     });
   });

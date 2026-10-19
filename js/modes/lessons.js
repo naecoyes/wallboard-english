@@ -4,9 +4,10 @@ import { h, toast } from '../ui.js';
 import { icon } from '../icons.js';
 import { update, get } from '../store.js';
 import { addCard } from '../srs.js';
-import { mimoAuth, stopSpeak } from '../tts.js';
+import { stopSpeak } from '../tts.js';
 import { probeDuration } from '../lessons/audio.js';
-import { DEFAULT_LLM } from '../lessons/api.js';
+import { DEFAULT_LLM, DEFAULT_GEMINI } from '../lessons/api.js';
+import { lessonAuth, savedGeminiKey, setGeminiKey } from '../lessons/keys.js';
 import { listLessons, getLesson, putLesson, getAudio, deleteLesson, deleteAllLessons } from '../lessons/db.js';
 import { subscribe, jobOf, start, cancel, createLesson, regenerateNotes } from '../lessons/runner.js';
 import { flatten, correctionsByLine, clock, ROLE, toTxt, toSrt, toMarkdown } from '../lessons/format.js';
@@ -20,6 +21,18 @@ function download(name, text, type) {
   const a = h('a', { href: url, download: name });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/** 复制到剪贴板；不支持 Clipboard API 时用隐藏文本框兜底 */
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  const ta = h('textarea', { style: 'position:fixed;left:-9999px;top:0' });
+  ta.value = text;
+  document.body.append(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch {}
+  ta.remove();
+  return ok;
 }
 
 function dialog(cls, ...children) {
@@ -99,15 +112,15 @@ export function renderLessons(root) {
       h('span', { class: 'wm-label' }, 'HOW IT WORKS'),
       h('ol', {},
         h('li', {}, 'Record your 1-to-1 class (MP3, M4A or WAV, up to about 60 minutes).'),
-        h('li', {}, 'Upload it here. MiMo transcribes the English and an AI model marks who is the teacher and who is the student.'),
+        h('li', {}, 'Upload it here. Gemini transcribes the English, marks who is the teacher and who is the student, and translates each line.'),
         h('li', {}, 'Tap any line to hear that part of the recording. Review the summary, corrections, expressions and new words.'),
         h('li', {}, 'Export TXT, Markdown or SRT subtitles.')),
-      h('p', { class: 'ls-note' }, 'Recordings stay on this device. Audio is sent to Xiaomi MiMo only for transcription. Ask your teacher before recording.'));
+      h('p', { class: 'ls-note' }, 'Recordings stay on this device. Audio is sent to Google Gemini (or Xiaomi MiMo) only for transcription. Ask your teacher before recording.'));
     wrap.replaceChildren(head, h('div', { class: 'ls-list' }, ...(cards.length ? cards : [empty])));
   }
 
   async function resume(id) {
-    if (!(await mimoAuth())) return needKey();
+    if (!(await lessonAuth())) return needKey();
     start(id);
   }
 
@@ -121,15 +134,16 @@ export function renderLessons(root) {
 
   function needKey() {
     const close = dialog('ls-dlg',
-      h('h2', {}, 'MiMo API key needed'),
-      h('p', {}, 'Lessons uses your Xiaomi MiMo key for transcription (about ¥0.5 per hour of audio). Add it under Settings → Pronunciation.'),
+      h('h2', {}, 'API key needed'),
+      h('p', {}, 'Lessons needs a Google Gemini API key (recommended) or a Xiaomi MiMo key. Add a Gemini key under Options on this page; the MiMo key is under Settings → Pronunciation.'),
       h('div', { class: 'btn-row' },
-        h('button', { class: 'btn primary', onclick: () => { close(); location.hash = '#settings'; } }, 'Open Settings'),
+        h('button', { class: 'btn primary', onclick: () => { close(); openOptions(); } }, 'Add Gemini key'),
         h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel')));
   }
 
   async function confirmUpload(file) {
-    if (!(await mimoAuth())) return needKey();
+    if (!(await lessonAuth())) return needKey();
+    const auth = await lessonAuth();
     const dur = await probeDuration(file);
     const title = h('input', { type: 'text', value: file.name.replace(/\.[^.]+$/, '').slice(0, 80), maxlength: '80' });
     const close = dialog('ls-dlg',
@@ -137,7 +151,7 @@ export function renderLessons(root) {
       h('label', {}, 'Title', title),
       h('p', { class: 'ls-meta' }, `${file.name} · ${(file.size / 1e6).toFixed(1)} MB${dur ? ` · ${clock(dur)}` : ''}`),
       dur > 3600 ? h('p', { class: 'ls-err' }, 'Longer than 60 minutes: the tablet may run out of memory while decoding. If it fails, split the recording first.') : null,
-      h('p', { class: 'ls-note' }, 'The audio is sent to Xiaomi MiMo for transcription, then the text goes to the analysis model. Make sure your teacher agrees to being recorded.'),
+      h('p', { class: 'ls-note' }, `The audio is sent to ${auth.provider === 'gemini' ? 'Google Gemini' : 'Xiaomi MiMo'} for transcription and analysis. Make sure your teacher agrees to being recorded.`),
       h('div', { class: 'btn-row' },
         h('button', {
           class: 'btn primary', onclick: async () => {
@@ -151,18 +165,27 @@ export function renderLessons(root) {
   }
 
   async function openOptions() {
-    const model = h('input', { type: 'text', value: get().settings.lessonModel || DEFAULT_LLM, spellcheck: 'false' });
+    const key = h('input', { type: 'password', value: savedGeminiKey(), placeholder: 'Paste your Gemini API key', autocomplete: 'off', spellcheck: 'false' });
+    const gModel = h('input', { type: 'text', value: get().settings.geminiModel || DEFAULT_GEMINI, spellcheck: 'false' });
+    const mModel = h('input', { type: 'text', value: get().settings.lessonModel || DEFAULT_LLM, spellcheck: 'false' });
+    const auth = await lessonAuth();
     const est = await navigator.storage?.estimate?.().catch(() => null);
     const close = dialog('ls-dlg',
       h('h2', {}, 'Lesson options'),
-      h('label', {}, 'Analysis model (speakers, translation, notes)', model),
-      h('p', { class: 'ls-meta' }, `Transcription always uses mimo-v2.5-asr. Default analysis model: ${DEFAULT_LLM}.`),
+      h('p', { class: 'ls-meta' }, `Now using: ${!auth ? 'no key yet' : auth.provider === 'gemini' ? 'Google Gemini' : 'Xiaomi MiMo (add a Gemini key for speakers and exact times)'}`),
+      h('label', {}, 'Gemini API key — stored only on this device, never synced', key),
+      h('label', {}, 'Gemini model', gModel),
+      h('label', {}, 'MiMo analysis model (used when there is no Gemini key)', mModel),
       est ? h('p', { class: 'ls-meta' }, `Browser storage used: ${(est.usage / 1e6).toFixed(0)} MB`) : null,
       h('div', { class: 'btn-row' },
         h('button', {
           class: 'btn primary', onclick: () => {
-            const v = model.value.trim();
-            update(s => { s.settings.lessonModel = v && v !== DEFAULT_LLM ? v : ''; });
+            setGeminiKey(key.value.trim());
+            const g = gModel.value.trim(), m = mModel.value.trim();
+            update(s => {
+              s.settings.geminiModel = g && g !== DEFAULT_GEMINI ? g : '';
+              s.settings.lessonModel = m && m !== DEFAULT_LLM ? m : '';
+            });
             close(); toast('Saved');
           },
         }, 'Save'),
@@ -224,11 +247,14 @@ export function renderLessons(root) {
           h('button', { class: 'btn', onclick: () => { download(`${base}.md`, toMarkdown(lesson), 'text/markdown'); close(); } }, 'Markdown · notes + transcript'),
           h('button', { class: 'btn', onclick: () => { download(`${base}.txt`, toTxt(lesson), 'text/plain'); close(); } }, 'TXT · transcript'),
           h('button', { class: 'btn', onclick: () => { download(`${base}.srt`, toSrt(lesson), 'application/x-subrip'); close(); } }, 'SRT · subtitles')),
-        h('p', { class: 'ls-meta' }, 'Times are estimated within each 90-second part of the recording.'),
+        lesson.provider === 'gemini' ? null : h('p', { class: 'ls-meta' }, 'Times are estimated within each 90-second part of the recording.'),
         h('div', { class: 'btn-row' }, h('button', { class: 'btn ghost', onclick: () => close() }, 'Close')));
     };
     actions.prepend(
       h('button', { type: 'button', class: 'btn sm ghost', onclick: swapAll, title: 'Swap Teacher and Student labels' }, icon('repeat', 16), 'Swap roles'),
+      h('button', { type: 'button', class: 'btn sm', title: 'Copy notes and the full transcript', onclick: async () => {
+        toast(await copyText(toMarkdown(lesson)) ? 'Copied notes and transcript' : 'Copy failed — use Export instead');
+      } }, icon('cards', 16), 'Copy all'),
       h('button', { type: 'button', class: 'btn sm', onclick: exportMenu }, icon('download', 16), 'Export'));
 
     // 播放器

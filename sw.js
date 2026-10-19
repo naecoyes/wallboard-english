@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v50'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v51'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 // 词库 / 句库（约 1.7 MB）单独缓存：改界面升级版本号时不必重新下载，后台静默更新
 const DATA_CACHE = 'wallboard-data-v4';
 const DATA_FILES = ['./js/words.js', './js/sentences.js', './js/passages.js'];
@@ -40,6 +40,7 @@ const ASSETS = [
   './js/lessons/db.js',
   './js/lessons/format.js',
   './js/lessons/runner.js',
+  './js/lessons/keys.js',
   './js/modes/standby.js',
   './js/modes/micro.js',
   './js/modes/focus.js',
