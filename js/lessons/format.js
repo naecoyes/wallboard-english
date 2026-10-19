@@ -12,7 +12,7 @@ export function flatten(lesson) {
       // Gemini 给了时间戳就用（保证不倒退），否则按字数在本段内估算
       const est = c.start + (c.end - c.start) * acc / total;
       const prev = out.length ? out[out.length - 1].start : 0;
-      const start = Number.isFinite(t.at) ? Math.max(prev, Math.min(c.end, t.at)) : est;
+      const start = Math.max(prev, c.start, Math.min(c.end, Number.isFinite(t.at) ? t.at : est));
       out.push({ ...t, chunk: ci, idx: ti, start });
       acc += t.text.length;
     });
@@ -24,10 +24,13 @@ export function flatten(lesson) {
 /** 纠错挂到对应的学生发言上：优先用行号，对不上就按原文查找 */
 export function correctionsByLine(turns, corrections = []) {
   const map = new Map();
-  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   for (const c of corrections) {
+    const original = norm(c.original);
+    if (!original) continue;
+    const matches = t => t?.role === 'student' && norm(t.text).includes(original);
     let i = c.line;
-    if (!(turns[i] && norm(turns[i].text).includes(norm(c.original)))) i = turns.findIndex(t => norm(t.text).includes(norm(c.original)));
+    if (!matches(turns[i])) i = turns.findIndex(matches);
     if (i < 0) continue;
     if (!map.has(i)) map.set(i, []);
     map.get(i).push(c);
@@ -51,8 +54,25 @@ export function toTxt(lesson) {
 }
 
 export function toSrt(lesson) {
-  return flatten(lesson).map((t, i) =>
-    `${i + 1}\n${srtTime(t.start)} --> ${srtTime(Math.max(t.end, t.start + 1))}\n${ROLE[t.role]}: ${t.text}\n`).join('\n');
+  const turns = flatten(lesson), cues = [];
+  const duration = lesson.duration ?? lesson.chunks?.at(-1)?.end ?? 0;
+  for (const t of turns) {
+    const prev = cues.at(-1);
+    if (prev && Math.round(prev.start * 1000) === Math.round(t.start * 1000)) {
+      prev.text += `\n${ROLE[t.role]}: ${t.text}`;
+    } else cues.push({ start: t.start, text: `${ROLE[t.role]}: ${t.text}` });
+  }
+  return cues.map((t, i) => ({ ...t, end: Math.min(duration, cues[i + 1]?.start ?? duration) }))
+    .filter(t => Math.round(t.end * 1000) > Math.round(t.start * 1000))
+    .map((t, i) => `${i + 1}\n${srtTime(t.start)} --> ${srtTime(t.end)}\n${t.text}\n`).join('\n');
+}
+
+/** Transcript/role edits invalidate derived notes in the same database write. */
+export function invalidateNotes(lesson) {
+  lesson.transcriptVersion = (lesson.transcriptVersion || 0) + 1;
+  lesson.notes = null;
+  lesson.notesVersion = null;
+  lesson.notesError = '';
 }
 
 export function toMarkdown(lesson) {

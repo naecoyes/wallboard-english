@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "learnenglish-sync",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "vars": { "ALLOW_LOCAL_ORIGINS": "false" },
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountState" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountState"] }],
+  // Account-unique positive integer string; choose another if already in use.
+  "ratelimits": [{
+    "name": "PUBLIC_RATE_LIMITER",
+    "namespace_id": "8931001",
+    "simple": { "limit": 120, "period": 60 }
+  }],
+  "env": {
+    "development": {
+      "name": "learnenglish-sync-development",
+      "vars": { "ALLOW_LOCAL_ORIGINS": "true" },
+      "durable_objects": {
+        "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountState" }]
+      },
+      "ratelimits": [{
+        "name": "PUBLIC_RATE_LIMITER",
+        "namespace_id": "8931002",
+        "simple": { "limit": 120, "period": 60 }
+      }]
+    }
+  }
+}

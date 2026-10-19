@@ -1,4 +1,5 @@
 // store.js — localStorage 存取、数据迁移、导出/导入
+import { mergeProfile, withoutSecrets, sessionParts, sessionTotals } from './cloud-merge.js';
 const KEY = 'wallboard-en-v1';
 
 const defaults = () => ({
@@ -50,31 +51,36 @@ try {
   } else if (data) users.male = migrate(data);
 } catch (e) { console.warn('Could not read saved data', e); }
 let state = users[activeUser];
+let diskBase = structuredClone(users);
 for (const { id } of USERS) users[id].settings = state.settings;
 
 export const currentUserId = () => activeUser;
 export const getUserState = (id) => {
-  const disk = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (id !== activeUser && disk?.format === 2 && (disk.users?.[id]?.updatedAt || 0) > (users[id]?.updatedAt || 0)) {
-    users[id] = migrate(disk.users[id]);
-    users[id].settings = state.settings;
-    users[id].settingsAt = state.settingsAt || 0;
-  }
+  refreshDisk();
   return users[id];
 };
-function persist() {
-  // A second tab may be studying as the other learner. Never overwrite its newer snapshot.
-  const disk = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (disk?.format === 2) {
-    for (const { id } of USERS) {
-      if (id !== activeUser && (disk.users?.[id]?.updatedAt || 0) > (users[id].updatedAt || 0)) users[id] = migrate(disk.users[id]);
-    }
-    if ((disk.settingsAt || 0) > (state.settingsAt || 0)) {
-      for (const { id } of USERS) { users[id].settings = { ...defaults().settings, ...disk.settings }; users[id].settingsAt = disk.settingsAt; }
-    }
+function refreshDisk() {
+  let disk;
+  try { disk = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return; }
+  if (disk?.format !== 2) return;
+  const localSettings = { ...state.settings };
+  for (const { id } of USERS) {
+    const remote = migrate({ ...disk.users?.[id], settings: disk.settings, settingsAt: disk.settingsAt || 0 });
+    const merged = mergeProfile(users[id], remote, diskBase[id]);
+    // Preserve references held by active views and device-only configuration.
+    merged.settings = { ...defaults().settings, ...merged.settings, mimoKey: localSettings.mimoKey, mimoEndpoint: localSettings.mimoEndpoint };
+    Object.assign(users[id], merged);
+    diskBase[id] = structuredClone(remote);
   }
+  state = users[activeUser];
+  for (const { id } of USERS) users[id].settings = state.settings;
+}
+function persist({ replace = false } = {}) {
+  if (!replace) refreshDisk();
   for (const { id } of USERS) { users[id].settings = state.settings; users[id].settingsAt = state.settingsAt || 0; }
   localStorage.setItem(KEY, JSON.stringify({ format: 2, activeUser, users, settings: state.settings, settingsAt: state.settingsAt || 0 }));
+  diskBase = structuredClone(users);
+  resetSnapshots();
 }
 export function switchUser(id) {
   if (!USERS.some(u => u.id === id)) throw new Error('Unknown user');
@@ -136,27 +142,26 @@ export function compactSessions(list, now = Date.now()) {
     const day = r.studyDay || dayOf(new Date(r.date));
     if (day >= cutoff) { keep.push(r); continue; }
     const id = `agg:${day}:${r.mode}`;
-    const g = groups.get(id) || { day, mode: r.mode, aggSec: 0, aggCount: 0, rawSec: 0, rawCount: 0 };
-    if (r.timerId === id) { g.aggSec = Math.max(g.aggSec, secondsOf(r)); g.aggCount = Math.max(g.aggCount, r.count || 0); }
-    else { g.rawSec += secondsOf(r); g.rawCount += 1; }
+    const g = groups.get(id) || { day, mode: r.mode, parts: {} };
+    for (const [key, part] of Object.entries(sessionParts(r))) {
+      if (!g.parts[key] || part.seconds > g.parts[key].seconds) g.parts[key] = part;
+    }
     groups.set(id, g);
   }
-  // 同一天已合并过、另一台设备又带来原始记录时取较大值，不会重复累加
   for (const [id, g] of groups) {
-    const seconds = Math.round(Math.max(g.aggSec, g.rawSec));
-    const count = Math.max(g.aggCount, g.rawCount);
-    keep.push({ timerId: id, studyDay: g.day, date: `${g.day}T12:00:00.000Z`, mode: g.mode, seconds, minutes: seconds / 60, count, result: `${count} sessions` });
+    const { seconds, count } = sessionTotals(g.parts);
+    keep.push({ timerId: id, studyDay: g.day, date: `${g.day}T12:00:00.000Z`, mode: g.mode, parts: g.parts, seconds, minutes: seconds / 60, count, result: `${count} sessions` });
   }
   return keep.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 const saveHooks = [];
 export const onSave = (fn) => saveHooks.push(fn);
-let settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
+let settingsSnap = JSON.stringify(withoutSecrets({ settings: state.settings }).settings);
 
 /** 设置变化时记录时间，同步时用来判断哪台设备的设置更新 */
 function touchSettings() {
-  const snap = JSON.stringify({ ...state.settings, mimoKey: '' });
+  const snap = JSON.stringify(withoutSecrets({ settings: state.settings }).settings);
   if (snap !== settingsSnap) {
     settingsSnap = snap;
     const at = Date.now();
@@ -185,14 +190,14 @@ export function save(silent = false) {
 
 /** 用合并后的数据整体替换（同步用） */
 function resetSnapshots() {
-  settingsSnap = JSON.stringify({ ...state.settings, mimoKey: '' });
+  settingsSnap = JSON.stringify(withoutSecrets({ settings: state.settings }).settings);
   contentSnap = JSON.stringify({ ...state, updatedAt: 0 });
 }
 export function replaceState(next, { silent = false, userId = activeUser } = {}) {
   if (!users[userId]) throw new Error('Unknown user');
   const replacement = migrate(next);
-  const shared = (replacement.settingsAt || 0) > (state.settingsAt || 0)
-    ? { ...replacement.settings, mimoKey: state.settings.mimoKey || replacement.settings.mimoKey }
+  const shared = (replacement.settingsAt || 0) >= (state.settingsAt || 0)
+    ? { ...replacement.settings, mimoKey: state.settings.mimoKey, mimoEndpoint: state.settings.mimoEndpoint }
     : state.settings;
   const settingsAt = Math.max(replacement.settingsAt || 0, state.settingsAt || 0);
   users[userId] = replacement;
@@ -207,7 +212,11 @@ export function update(fn) { fn(state); save(); }
 
 /** 增加 XP 并按 100 XP/级 升级 */
 export function addXP(amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('XP must be a positive integer');
   update(s => {
+    s.xpBase ??= Math.max(0, s.profile.xp - Object.values(s.xpEvents || {}).reduce((n, v) => n + v, 0));
+    s.xpEvents ||= {};
+    s.xpEvents[crypto.randomUUID()] = amount;
     s.profile.xp += amount;
     s.profile.level = Math.floor(s.profile.xp / 100) + 1;
   });
@@ -216,7 +225,7 @@ export function addXP(amount) {
 /** 记录一次会话 */
 export function logSession(mode, minutes, result) {
   update(s => {
-    s.sessions.push({ date: new Date().toISOString(), mode, minutes, result });
+    s.sessions.push({ timerId: crypto.randomUUID(), date: new Date().toISOString(), mode, minutes, result });
     s.sessions = compactSessions(s.sessions);
   });
 }
@@ -225,9 +234,7 @@ export function logSession(mode, minutes, result) {
 export function exportJSON() {
   for (const { id } of USERS) getUserState(id);
   const copy = JSON.parse(JSON.stringify({ format: 2, users, settings: state.settings, settingsAt: state.settingsAt || 0 }));
-  copy.settings.mimoKey = '';
-  for (const user of Object.values(copy.users)) user.settings.mimoKey = '';
-  return JSON.stringify(copy, null, 2);
+  return JSON.stringify(withoutSecrets(copy), null, 2);
 }
 
 /** 导入 JSON，返回 {ok, error} */
@@ -237,11 +244,12 @@ export function importJSON(text) {
     const data = JSON.parse(text);
     if (typeof data !== 'object' || data === null) throw new Error('Not a valid backup object');
     const keepKey = state.settings.mimoKey;
+    const keepEndpoint = state.settings.mimoEndpoint;
     if (data.format === 2) {
       if (!data.users?.male || !data.users?.female) throw new Error('Backup must contain both users');
       const restored = {};
       for (const { id } of USERS) restored[id] = migrate(data.users[id]);
-      const settings = { ...defaults().settings, ...data.settings, mimoKey: keepKey };
+      const settings = { ...defaults().settings, ...data.settings, mimoKey: keepKey, mimoEndpoint: keepEndpoint };
       for (const { id } of USERS) { restored[id].settings = settings; restored[id].settingsAt = Date.now(); restored[id].updatedAt = Date.now(); }
       users = restored;
       state = users[activeUser];
@@ -249,13 +257,14 @@ export function importJSON(text) {
       users[activeUser] = migrate(data);
       state = users[activeUser];
       state.settings.mimoKey = keepKey;
+      state.settings.mimoEndpoint = keepEndpoint;
       for (const { id } of USERS) users[id].settings = state.settings;
     }
     const restoredAt = Date.now();
     state.updatedAt = restoredAt;
     for (const { id } of USERS) users[id].settingsAt = restoredAt;
     resetSnapshots();
-    persist();
+    persist({ replace: true });
     saveHooks.forEach(f => f());
     return { ok: true };
   } catch (e) {

@@ -7,7 +7,7 @@ import {
   localKeyPresent, ttsCacheCount, clearTtsCache, ttsConfigReady, staticAudioReady, staticAudioInfo,
 } from '../tts.js';
 import { wakeLockSupported, wakeLockActive, requestWakeLock } from '../wakelock.js';
-import { syncState, onSyncChange, connect, unlock, disconnect, syncNow, syncRepo } from '../sync.js';
+import { syncState, onSyncChange, connect, unlock, disconnect, syncNow, syncRepo, createDeviceLink, pairDevice, canShareDevice, revokeDeviceLinks, githubAvailable } from '../sync.js';
 import { applyTheme, currentTheme, currentPalette, PALETTES } from '../theme.js';
 
 function row(ico, color, label, desc, ...controls) {
@@ -283,25 +283,46 @@ export function renderSettings(root) {
   const sync = (() => {
     const pill = h('span', { class: 'status-pill warn' });
     const msg = h('small', {});
-    const repoIn = h('input', { class: 'key-input', placeholder: 'owner/repo (private data repo)', value: syncRepo() || 'naecoyes/wallboard-data', autocomplete: 'off' });
-    const tokIn = h('input', { type: 'password', class: 'key-input', placeholder: 'Fine-grained token (Contents: read & write)', autocomplete: 'off' });
+    const deviceLink = h('textarea', { class: 'import-box', placeholder: 'Paste a device link from your other device…', 'aria-label': 'Device pairing link' });
+    const repoIn = h('input', { class: 'key-input', placeholder: 'GitHub owner/repository', 'aria-label': 'GitHub repository', autocomplete: 'off', spellcheck: 'false' });
+    const tokenIn = h('input', { type: 'password', class: 'key-input', placeholder: 'GitHub token with Contents read/write access', 'aria-label': 'GitHub token', autocomplete: 'off', spellcheck: 'false' });
     const passIn = h('input', { type: 'password', class: 'key-input', placeholder: 'Passphrase (12+ characters)', autocomplete: 'off' });
     const act = h('div', { class: 'btn-row', style: 'margin-top:4px' });
     const form = h('div', { class: 'row stack' });
     const paint = () => {
       const st = syncState.status;
       pill.className = 'status-pill ' + (st === 'ok' ? 'ok' : st === 'error' ? 'bad' : 'warn');
-      pill.textContent = { off: 'Off', locked: 'Locked', syncing: 'Syncing…', ok: 'Synced', error: 'Error' }[st];
-      msg.textContent = syncState.message || (st === 'ok' && syncState.last ? `Last sync ${new Date(syncState.last).toLocaleTimeString()}` : 'Progress is stored in your private GitHub repo. The token is encrypted on this device.');
+      pill.textContent = { off: 'Off', ready: 'Ready', unconfigured: 'Not deployed', locked: 'Locked', syncing: 'Syncing…', ok: 'Synced', error: 'Error' }[st];
+      msg.textContent = syncState.message || (st === 'ok' && syncState.last ? `Last sync ${new Date(syncState.last).toLocaleString()} · both learners` : st === 'unconfigured' ? 'Cloud deployment is pending. Connect GitHub below, or pair using an existing device link.' : canShareDevice() ? 'Syncs automatically. Pair another device once to share both learners.' : syncRepo() ? `GitHub: ${syncRepo()} · both learners` : 'Choose GitHub sync or pair an existing learning space.');
       form.replaceChildren(); act.replaceChildren();
-      if (st === 'off') {
-        form.append(repoIn, tokIn, passIn);
-        act.append(h('span', { class: 'spacer' }), h('button', { class: 'btn sm blue', onclick: async (e) => {
-          if (passIn.value.length < 12) return toast('Passphrase needs 12+ characters');
-          e.target.disabled = true;
-          try { await connect({ repo: repoIn.value, tokenText: tokIn.value, pass: passIn.value }); toast('Sync connected'); }
-          catch (err) { toast(err.message); } finally { e.target.disabled = false; paint(); }
-        } }, 'Connect'));
+      if (st !== 'locked') {
+        form.append(deviceLink, h('button', { class: 'btn sm', onclick: async () => {
+          try { await pairDevice(deviceLink.value.trim()); deviceLink.value = ''; toast('Device paired'); } catch (err) { toast(err.message); }
+          paint();
+        } }, 'Pair this device'));
+      }
+      if (canShareDevice()) {
+        form.append(h('button', { class: 'btn sm', onclick: async () => {
+          try { deviceLink.value = await createDeviceLink(); deviceLink.focus(); deviceLink.select(); toast('Copy this private link to your other device'); } catch (err) { toast(err.message); }
+        } }, 'Create device link'), h('button', { class: 'btn sm danger', onclick: async () => {
+          if (!confirm('Revoke this shared link and disconnect every paired device? Local study data is kept. Enable sync again to create a new private space.')) return;
+          try { await revokeDeviceLinks(); toast('All device links revoked'); } catch (err) { toast(err.message); }
+          paint();
+        } }, 'Revoke all device links'));
+      }
+      if (githubAvailable() && ['off', 'ready', 'unconfigured', 'error'].includes(st) && !syncRepo()) {
+        form.append(h('small', {}, 'GitHub sync is available while cloud deployment is pending. Use a private repository and the same passphrase on each device.'), repoIn, tokenIn, passIn);
+        act.append(h('button', { class: 'btn sm blue', onclick: async () => {
+          try {
+            await connect({ repo: repoIn.value, tokenText: tokenIn.value, pass: passIn.value });
+            tokenIn.value = ''; passIn.value = ''; toast('GitHub sync connected');
+          } catch (err) { toast(err.message); }
+          paint();
+        } }, 'Connect GitHub'));
+      } else if (['off', 'ready', 'unconfigured'].includes(st)) {
+        if (st !== 'unconfigured') act.append(h('button', { class: 'btn sm blue', onclick: async () => {
+          try { await connect(); } catch (err) { toast(err.message); } paint();
+        } }, 'Enable auto sync'));
       } else if (st === 'locked') {
         form.append(passIn);
         act.append(h('button', { class: 'btn sm danger', onclick: async () => { await disconnect(); paint(); } }, 'Disconnect'), h('span', { class: 'spacer' }),
@@ -314,7 +335,7 @@ export function renderSettings(root) {
     onSyncChange(paint); paint();
     return h('div', { class: 'row stack' },
       h('div', { class: 'row-top' }, h('span', { class: 'r-ico c-sky' }, icon('repeat', 20)),
-        h('div', { class: 'r-label' }, 'GitHub sync', msg), pill), form, act);
+        h('div', { class: 'r-label' }, 'Cloud sync', msg), pill), form, act);
   })();
 
   const dataGroup = group('Data',

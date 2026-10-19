@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 import { treeProgress } from '../js/learning-tree.js';
-const source = fs.readFileSync(new URL('../js/store.js', import.meta.url), 'utf8').replace(/export /g, '');
+import * as cloudMerge from '../js/cloud-merge.js';
+// Inject the store's real module dependency into each isolated VM tab.
+const source = fs.readFileSync(new URL('../js/store.js', import.meta.url), 'utf8').replace(/^import .*;$/gm, '').replace(/export /g, '');
 function store(initial) {
   const data = new Map(initial ? [['wallboard-en-v1', JSON.stringify(initial)]] : []);
   const localStorage = { getItem: k => data.get(k) || null, setItem: (k,v) => data.set(k,v) };
-  const c = vm.createContext({ localStorage, console, Date, JSON, Math, structuredClone });
+  const c = vm.createContext({ localStorage, console, Date, JSON, Math, structuredClone, crypto: webcrypto, ...cloudMerge });
   vm.runInContext(source + '\nthis.api={get,update,switchUser,currentUserId,getUserState,replaceState,exportJSON,importJSON,onSave};', c);
   return { ...c.api, data, context: c };
 }
@@ -63,7 +65,7 @@ for(const points of [0,49,50,149,150,399,400,799,800,1499,1500]) {
 // Mock GitHub to exercise legacy migration and a profile switch during the remote read.
 let switched=false;const written=new Map();
 const remote={state:{...s.getUserState('male'),updatedAt:Date.now()+1000},salt:'unused'};
-const syncSrc=fs.readFileSync(new URL('../js/sync.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/export /g,'');
+const syncSrc=fs.readFileSync(new URL('../js/github-sync.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/export /g,'');
 const ctx=s.context;
 Object.assign(ctx, {crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,btoa,atob,
  setTimeout:()=>0,clearTimeout:()=>{},window:{dispatchEvent(){}},CustomEvent:class{},

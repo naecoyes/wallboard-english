@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+const data = new Map();
+globalThis.localStorage = { getItem: k => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: k => data.delete(k) };
+const tab = async name => import(`../js/store.js?tab=${name}`);
+const first = await tab('first');
+first.save(true);
+const second = await tab('second');
+test('same-profile tabs preserve independent fields, awards, and deletions', () => {
+  first.update(s => { s.words.known.push('one'); });
+  second.update(s => { s.reading.pos[1] = 4; });
+  assert.deepEqual(second.get().words.known, ['one']);
+  first.addXP(10); second.addXP(20);
+  assert.equal(first.getUserState('male').profile.xp, 30);
+  first.update(s => { s.words.known = []; });
+  second.update(s => { s.reading.pos[2] = 5; });
+  assert.deepEqual(second.get().words.known, []);
+  assert.deepEqual(second.get().reading.pos, { 1: 4, 2: 5 });
+});
+test('remote replace and both backup formats preserve local endpoint and key', () => {
+  second.update(s => { s.settings.mimoEndpoint = 'https://local.example'; s.settings.mimoKey = 'local-secret'; });
+  const remote = structuredClone(second.get()); remote.settingsAt = Date.now() + 1000;
+  remote.settings.mimoEndpoint = 'https://attacker.example'; remote.settings.mimoKey = 'remote-secret';
+  second.replaceState(remote);
+  assert.equal(second.get().settings.mimoEndpoint, 'https://local.example');
+  const old = structuredClone(remote);
+  assert.equal(second.importJSON(JSON.stringify(old)).ok, true);
+  assert.equal(second.get().settings.mimoEndpoint, 'https://local.example');
+  assert.equal(second.importJSON(JSON.stringify({ profile: { xp: 3 } })).ok, true);
+  assert.equal(second.get().profile.xp, 3, 'an explicit old backup replaces the XP ledger');
+  const both = { format: 2, users: { male: old, female: old }, settings: old.settings };
+  assert.equal(second.importJSON(JSON.stringify(both)).ok, true);
+  assert.equal(second.get().settings.mimoKey, 'local-secret');
+  assert.equal(second.get().settings.mimoEndpoint, 'https://local.example');
+  assert.equal(second.exportJSON().includes('mimoEndpoint'), false);
+  assert.equal(second.exportJSON().includes('local-secret'), false);
+});
+test('old session compaction remains exact with disjoint records and repeated overlap', () => {
+  const raw = (id, seconds) => ({ timerId: id, date: '2020-01-01T12:00:00.000Z', studyDay: '2020-01-01', mode: 'focus', seconds, minutes: seconds / 60 });
+  const a = raw('a', 60), b = raw('b', 90);
+  const compact = second.compactSessions([a]);
+  const combined = second.compactSessions([...compact, a, b]);
+  assert.equal(combined[0].seconds, 150);
+  assert.equal(combined[0].count, 2);
+  assert.deepEqual(second.compactSessions([...combined, a, b]), combined);
+});

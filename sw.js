@@ -1,5 +1,5 @@
 // sw.js — 离线缓存 app shell
-const CACHE = 'wallboard-en-v51'; // 改版后升级版本号，旧缓存会在 activate 时清掉
+const CACHE = 'wallboard-en-v52'; // 改版后升级版本号，旧缓存会在 activate 时清掉
 // 词库 / 句库（约 1.7 MB）单独缓存：改界面升级版本号时不必重新下载，后台静默更新
 const DATA_CACHE = 'wallboard-data-v4';
 const DATA_FILES = ['./js/words.js', './js/sentences.js', './js/passages.js'];
@@ -16,6 +16,10 @@ const ASSETS = [
   './js/study-timer.js',
   './js/auto-advance.js',
   './js/sync.js',
+  './js/cloud-config.js',
+  './js/cloud-merge.js',
+  './js/github-sync.js',
+  './js/api-origins.js',
   './js/external-study.js',
   './js/srs.js',
   './js/tts.js',
@@ -36,6 +40,8 @@ const ASSETS = [
   './js/modes/reading.js',
   './js/modes/lessons.js',
   './js/lessons/audio.js',
+  './js/lessons/audio-worker.js',
+  './js/lessons/transcript-view.js',
   './js/lessons/api.js',
   './js/lessons/db.js',
   './js/lessons/format.js',
@@ -63,6 +69,12 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== AUDIO_CACHE && k !== DATA_CACHE).map(k => caches.delete(k))))
+      .then(async () => {
+        for (const name of await caches.keys()) {
+          const cache = await caches.open(name);
+          for (const request of await cache.keys()) if (new URL(request.url).pathname.endsWith('/config.local.js')) await cache.delete(request);
+        }
+      })
       .then(() => self.clients.claim()));
 });
 
@@ -72,6 +84,10 @@ const AUDIO_CACHE = 'wallboard-audio-v1';
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  if (url.pathname.endsWith('/config.local.js')) {
+    e.respondWith(fetch(new Request(e.request, { cache: 'no-store' })));
+    return;
+  }
   if (url.origin === self.location.origin && (url.pathname.includes('/audio/words/') || url.pathname.includes('/audio/s/'))) {
     // 索引文件：优先网络（重新生成后能及时更新），断网时用缓存
     if (url.pathname.endsWith('/index.json')) {

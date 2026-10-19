@@ -6,6 +6,7 @@
 // 同一段文本只请求一次：结果存在 IndexedDB，挂墙反复播放不重复计费。
 import { get, update } from './store.js';
 import { toast } from './ui.js';
+import { approvedEndpoint } from './api-origins.js';
 
 export const MIMO_MODEL = 'mimo-v2.5-tts';
 export const MIMO_DEFAULT_ENDPOINT = 'https://api.xiaomimimo.com/v1/chat/completions';
@@ -83,7 +84,7 @@ function mimoConfig() {
   const s = get().settings;
   const key = (s.mimoKey || '').trim() || localKey;
   if (s.ttsProvider === 'system' || !key) return null;
-  return { key, voice: s.mimoVoice || 'Dean', endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT };
+  return { key, voice: s.mimoVoice || 'Dean', endpoint: approvedEndpoint('mimo') };
 }
 
 /** MiMo Key 和接口地址（不管发音用不用 MiMo），课堂录音转写也用这套 */
@@ -91,7 +92,7 @@ export async function mimoAuth() {
   await ttsConfigReady;
   const s = get().settings;
   const key = (s.mimoKey || '').trim() || localKey;
-  return key ? { key, endpoint: (s.mimoEndpoint || '').trim() || MIMO_DEFAULT_ENDPOINT } : null;
+  return key ? { key, endpoint: approvedEndpoint('mimo') } : null;
 }
 
 /** 当前实际使用的引擎：'mimo' | 'system' | 'none' */

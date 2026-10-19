@@ -9,8 +9,10 @@ import { probeDuration } from '../lessons/audio.js';
 import { DEFAULT_LLM, DEFAULT_GEMINI } from '../lessons/api.js';
 import { lessonAuth, savedGeminiKey, setGeminiKey } from '../lessons/keys.js';
 import { listLessons, getLesson, putLesson, getAudio, deleteLesson, deleteAllLessons } from '../lessons/db.js';
-import { subscribe, jobOf, start, cancel, createLesson, regenerateNotes } from '../lessons/runner.js';
-import { flatten, correctionsByLine, clock, ROLE, toTxt, toSrt, toMarkdown } from '../lessons/format.js';
+import { subscribe, jobOf, start, cancel, cancelAndWait, createLesson, regenerateNotes } from '../lessons/runner.js';
+import { flatten, invalidateNotes, correctionsByLine, clock, ROLE, toTxt, toSrt, toMarkdown } from '../lessons/format.js';
+
+import { activeTurnIndex, createTranscriptView } from '../lessons/transcript-view.js';
 
 const OPEN_KEY = 'wallboard-lesson-open';
 const STATUS = { processing: 'Processing', paused: 'Paused', partial: 'Incomplete', error: 'Failed', done: 'Ready' };
@@ -35,57 +37,88 @@ async function copyText(text) {
   return ok;
 }
 
-function dialog(cls, ...children) {
-  const dlg = h('dialog', { class: `external-dialog ${cls}` }, ...children);
-  const close = () => { dlg.close(); dlg.remove(); };
-  dlg.addEventListener('close', () => dlg.remove());
-  document.body.append(dlg);
-  dlg.showModal();
-  return close;
-}
-
 export function renderLessons(root) {
   let alive = true;
   let openId = sessionStorage.getItem(OPEN_KEY);
   let audioUrl = null;
   let player = null;
   let detailSig = '';
+  let generation = 0, progressTimer = 0, uploadGeneration = 0;
+  let transcript = null;
+  let audioLessonId = null, pendingSeek = null;
+  let pendingWrite = Promise.resolve();
+  let detailState = { showZh: false, revealed: new Set(), scroll: 0, tab: 'summary' };
+  const saveEdit = lesson => {
+    generation++;
+    const snapshot = structuredClone(lesson);
+    pendingWrite = pendingWrite.catch(() => {}).then(() => putLesson(snapshot));
+    return pendingWrite.catch(e => { if (alive) { detailSig = ''; paint(); } throw e; });
+  };
+  const rewriteNotes = async id => { await pendingWrite; if (alive && openId === id) await regenerateNotes(id); };
+  const dialogs = new Set();
+  const report = e => { if (alive) toast(e?.message || String(e)); };
+  const attempt = fn => (...args) => { try { Promise.resolve(fn(...args)).catch(report); } catch (e) { report(e); } };
+  function dialog(cls, ...children) {
+    if (!alive) return () => {};
+    const dlg = h('dialog', { class: `external-dialog ${cls}` }, ...children);
+    const close = () => { dialogs.delete(close); if (dlg.open) dlg.close(); dlg.remove(); };
+    dialogs.add(close);
+    dlg.addEventListener('close', close);
+    document.body.append(dlg);
+    try { dlg.showModal(); } catch (e) { close(); report(e); }
+    return close;
+  }
   const wrap = h('div', { class: 'word-mode ls' });
   root.append(wrap);
 
   const setOpen = (id) => {
+    if (!alive) return;
+    generation++;
+    uploadGeneration++;
+    for (const close of dialogs) close();
+    releaseAudio();
+    detailState = { showZh: false, revealed: new Set(), scroll: 0, tab: 'summary' };
     openId = id;
     if (id) sessionStorage.setItem(OPEN_KEY, id); else sessionStorage.removeItem(OPEN_KEY);
     detailSig = '';
     paint();
   };
   const releaseAudio = () => {
-    if (player) { player.pause(); player.removeAttribute('src'); player = null; }
+    transcript?.destroy(); transcript = null;
+    audioLessonId = null; pendingSeek = null;
+    if (player) { player.ontimeupdate = null; player.pause(); player.removeAttribute('src'); player = null; }
     if (audioUrl) { URL.revokeObjectURL(audioUrl); audioUrl = null; }
   };
 
   async function paint() {
     if (!alive) return;
-    if (openId) {
-      const lesson = await getLesson(openId);
-      if (lesson) return paintDetail(lesson);
-      openId = null; sessionStorage.removeItem(OPEN_KEY);
-    }
-    paintList();
+    const version = ++generation, id = openId;
+    const current = () => alive && version === generation && id === openId;
+    try {
+      await pendingWrite.catch(() => {});
+      if (!current()) return;
+      if (id) {
+        const lesson = await getLesson(id);
+        if (!current()) return;
+        if (lesson) return paintDetail(lesson);
+        openId = null; sessionStorage.removeItem(OPEN_KEY);
+      }
+      await paintList(version);
+    } catch (e) { if (alive && version === generation) report(e); }
   }
 
   // ======================= 列表 =======================
-  async function paintList() {
-    releaseAudio();
+  async function paintList(version) {
     const lessons = await listLessons();
-    if (!alive || openId) return;
+    if (!alive || openId || version !== generation) return;
+    releaseAudio();
     const fileInput = h('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.wav,.aac', hidden: '' });
-    fileInput.addEventListener('change', () => { const f = fileInput.files[0]; fileInput.value = ''; if (f) confirmUpload(f); });
+    fileInput.addEventListener('change', () => { const f = fileInput.files[0]; fileInput.value = ''; if (f) attempt(confirmUpload)(f); });
     const head = h('div', { class: 'mode-head' },
       h('div', {}, h('h1', {}, icon('mic', 24), 'Lessons'),
         h('div', { class: 'sub' }, 'Upload a class recording to get the transcript, speakers and review notes')),
       h('div', { class: 'btn-group' },
-        h('button', { type: 'button', class: 'btn sm ghost', onclick: openOptions }, icon('settings', 16), 'Options'),
+        h('button', { type: 'button', class: 'btn sm ghost', onclick: attempt(openOptions) }, icon('settings', 16), 'Options'),
         h('button', { type: 'button', class: 'btn sm', onclick: () => fileInput.click() }, icon('upload', 16), 'Upload recording'),
         fileInput));
 
@@ -93,7 +126,7 @@ export function renderLessons(root) {
       const job = jobOf(l.id);
       const status = job ? 'processing' : l.status === 'processing' ? 'paused' : l.status;
       const pct = job && job.total ? Math.round(job.done / job.total * 100) : 0;
-      const turns = flatten(l).length;
+      const turns = l.turnCount || 0;
       return h('section', { class: 'wm-card glass ls-card' },
         h('button', { type: 'button', class: 'ls-card-main', onclick: () => setOpen(l.id) },
           h('b', {}, l.title),
@@ -105,8 +138,8 @@ export function renderLessons(root) {
         h('div', { class: 'btn-row ls-card-actions' },
           h('button', { type: 'button', class: 'btn sm', onclick: () => setOpen(l.id) }, 'Open'),
           job ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => cancel(l.id) }, 'Pause')
-            : status !== 'done' ? h('button', { type: 'button', class: 'btn sm ghost', onclick: () => resume(l.id) }, status === 'paused' ? 'Resume' : 'Retry') : null,
-          h('button', { type: 'button', class: 'btn sm danger', onclick: () => remove(l) }, icon('trash', 15))));
+            : status !== 'done' ? h('button', { type: 'button', class: 'btn sm ghost', onclick: attempt(() => resume(l.id)) }, status === 'paused' ? 'Resume' : 'Retry') : null,
+          h('button', { type: 'button', class: 'btn sm danger', onclick: attempt(() => remove(l)) }, icon('trash', 15))));
     });
     const empty = h('section', { class: 'wm-card glass ls-empty' },
       h('span', { class: 'wm-label' }, 'HOW IT WORKS'),
@@ -120,14 +153,20 @@ export function renderLessons(root) {
   }
 
   async function resume(id) {
-    if (!(await lessonAuth())) return needKey();
-    start(id);
+    const navigation = uploadGeneration, opened = openId;
+    await pendingWrite;
+    const auth = await lessonAuth();
+    if (!alive || navigation !== uploadGeneration || opened !== openId) return;
+    if (!auth) return needKey();
+    await start(id);
   }
 
   async function remove(l) {
     if (!confirm(`Delete “${l.title}” and its recording from this device?`)) return;
-    cancel(l.id);
+    await pendingWrite.catch(() => {});
+    await cancelAndWait(l.id);
     await deleteLesson(l.id);
+    if (!alive) return;
     toast('Lesson deleted');
     if (openId === l.id) setOpen(null); else paint();
   }
@@ -137,14 +176,17 @@ export function renderLessons(root) {
       h('h2', {}, 'API key needed'),
       h('p', {}, 'Lessons needs a Google Gemini API key (recommended) or a Xiaomi MiMo key. Add a Gemini key under Options on this page; the MiMo key is under Settings → Pronunciation.'),
       h('div', { class: 'btn-row' },
-        h('button', { class: 'btn primary', onclick: () => { close(); openOptions(); } }, 'Add Gemini key'),
+        h('button', { class: 'btn primary', onclick: () => { close(); attempt(openOptions)(); } }, 'Add Gemini key'),
         h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel')));
   }
 
   async function confirmUpload(file) {
-    if (!(await lessonAuth())) return needKey();
+    const request = ++uploadGeneration, id = openId;
     const auth = await lessonAuth();
+    if (!alive || request !== uploadGeneration || id !== openId) return;
+    if (!auth) return needKey();
     const dur = await probeDuration(file);
+    if (!alive || request !== uploadGeneration || id !== openId) return;
     const title = h('input', { type: 'text', value: file.name.replace(/\.[^.]+$/, '').slice(0, 80), maxlength: '80' });
     const close = dialog('ls-dlg',
       h('h2', {}, 'New lesson'),
@@ -154,22 +196,24 @@ export function renderLessons(root) {
       h('p', { class: 'ls-note' }, `The audio is sent to ${auth.provider === 'gemini' ? 'Google Gemini' : 'Xiaomi MiMo'} for transcription and analysis. Make sure your teacher agrees to being recorded.`),
       h('div', { class: 'btn-row' },
         h('button', {
-          class: 'btn primary', onclick: async () => {
+          class: 'btn primary', onclick: attempt(async () => {
             close();
-            const id = await createLesson(file, title.value.trim() || file.name);
-            setOpen(id);
-          },
+            const created = await createLesson(file, title.value.trim() || file.name);
+            if (alive && request === uploadGeneration && id === openId) setOpen(created);
+          }),
         }, 'Start'),
         h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel')));
     title.focus();
   }
 
   async function openOptions() {
+    const request = uploadGeneration, id = openId;
     const key = h('input', { type: 'password', value: savedGeminiKey(), placeholder: 'Paste your Gemini API key', autocomplete: 'off', spellcheck: 'false' });
     const gModel = h('input', { type: 'text', value: get().settings.geminiModel || DEFAULT_GEMINI, spellcheck: 'false' });
     const mModel = h('input', { type: 'text', value: get().settings.lessonModel || DEFAULT_LLM, spellcheck: 'false' });
     const auth = await lessonAuth();
     const est = await navigator.storage?.estimate?.().catch(() => null);
+    if (!alive || request !== uploadGeneration || id !== openId) return;
     const close = dialog('ls-dlg',
       h('h2', {}, 'Lesson options'),
       h('p', { class: 'ls-meta' }, `Now using: ${!auth ? 'no key yet' : auth.provider === 'gemini' ? 'Google Gemini' : 'Xiaomi MiMo (add a Gemini key for speakers and exact times)'}`),
@@ -179,7 +223,7 @@ export function renderLessons(root) {
       est ? h('p', { class: 'ls-meta' }, `Browser storage used: ${(est.usage / 1e6).toFixed(0)} MB`) : null,
       h('div', { class: 'btn-row' },
         h('button', {
-          class: 'btn primary', onclick: () => {
+          class: 'btn primary', onclick: attempt(() => {
             setGeminiKey(key.value.trim());
             const g = gModel.value.trim(), m = mModel.value.trim();
             update(s => {
@@ -187,27 +231,32 @@ export function renderLessons(root) {
               s.settings.lessonModel = m && m !== DEFAULT_LLM ? m : '';
             });
             close(); toast('Saved');
-          },
+          }),
         }, 'Save'),
         h('button', {
-          class: 'btn danger', onclick: async () => {
+          class: 'btn danger', onclick: attempt(async () => {
             if (!confirm('Delete every lesson and recording from this device?')) return;
-            (await listLessons()).forEach(l => cancel(l.id));
+            await pendingWrite.catch(() => {});
+            const lessons = await listLessons();
+            await Promise.all(lessons.map(l => cancelAndWait(l.id)));
             await deleteAllLessons();
-            close(); toast('All lessons deleted'); setOpen(null);
-          },
+            close(); if (alive) { toast('All lessons deleted'); setOpen(null); }
+          }),
         }, 'Delete all lessons'),
         h('button', { class: 'btn ghost', onclick: () => close() }, 'Close')));
   }
 
   // ======================= 详情 =======================
-  async function paintDetail(lesson) {
+  function paintDetail(lesson) {
+    if (!alive || openId !== lesson.id) return;
     const job = jobOf(lesson.id);
-    const sig = job ? `job:${job.stage}:${job.done}:${job.total}` : `idle:${lesson.status}`;
+    const sig = JSON.stringify([lesson.id, job && [job.stage, job.done, job.total], lesson]);
     if (sig === detailSig) return;
-    const wasRunning = detailSig.startsWith('job:');
     detailSig = sig;
-    if (!job || !wasRunning) releaseAudio();
+    if (transcript) detailState.scroll = transcript.element.scrollTop;
+    transcript?.destroy(); transcript = null;
+    const wasPlaying = player && !player.paused;
+    if (job || audioLessonId !== lesson.id) releaseAudio();
 
     const back = h('button', { type: 'button', class: 'btn sm ghost', onclick: () => setOpen(null) }, icon('arrowRight', 16), 'All lessons');
     back.firstChild.style.transform = 'rotate(180deg)';
@@ -237,7 +286,11 @@ export function renderLessons(root) {
     const failed = (lesson.chunks || []).filter(c => c.status !== 'done');
     const swapAll = async () => {
       for (const c of lesson.chunks) for (const t of c.turns || []) if (t.role !== 'unknown') t.role = NEXT_ROLE[t.role];
-      await putLesson(lesson); detailSig = ''; paintDetail(lesson); toast('Teacher and student swapped');
+      invalidateNotes(lesson);
+      const saving = saveEdit(lesson);
+      detailSig = ''; paintDetail(lesson);
+      await saving;
+      if (alive && openId === lesson.id) toast('Teacher and student swapped');
     };
     const exportMenu = () => {
       const base = lesson.title.replace(/[\\/:*?"<>|]+/g, '_');
@@ -251,80 +304,93 @@ export function renderLessons(root) {
         h('div', { class: 'btn-row' }, h('button', { class: 'btn ghost', onclick: () => close() }, 'Close')));
     };
     actions.prepend(
-      h('button', { type: 'button', class: 'btn sm ghost', onclick: swapAll, title: 'Swap Teacher and Student labels' }, icon('repeat', 16), 'Swap roles'),
-      h('button', { type: 'button', class: 'btn sm', title: 'Copy notes and the full transcript', onclick: async () => {
-        toast(await copyText(toMarkdown(lesson)) ? 'Copied notes and transcript' : 'Copy failed — use Export instead');
-      } }, icon('cards', 16), 'Copy all'),
+      h('button', { type: 'button', class: 'btn sm ghost', onclick: attempt(swapAll), title: 'Swap Teacher and Student labels' }, icon('repeat', 16), 'Swap roles'),
+      h('button', { type: 'button', class: 'btn sm', title: 'Copy notes and the full transcript', onclick: attempt(async () => {
+        const copied = await copyText(toMarkdown(lesson));
+        if (alive && openId === lesson.id) toast(copied ? 'Copied notes and transcript' : 'Copy failed — use Export instead');
+      }) }, icon('cards', 16), 'Copy all'),
       h('button', { type: 'button', class: 'btn sm', onclick: exportMenu }, icon('download', 16), 'Export'));
 
-    // 播放器
-    player = h('audio', { controls: '', preload: 'metadata', class: 'ls-audio' });
-    getAudio(lesson.id).then(blob => {
-      if (!alive || !player || !blob) return;
-      audioUrl = URL.createObjectURL(blob);
-      player.src = audioUrl;
-    });
+    // Keep this recording's audio element when notes or speaker labels repaint.
+    if (!player) {
+      player = h('audio', { controls: '', preload: 'metadata', class: 'ls-audio' });
+      audioLessonId = lesson.id;
+      const captured = player;
+      getAudio(lesson.id).then(blob => {
+        if (!alive || openId !== lesson.id || player !== captured) return;
+        if (!blob) { toast('The recording is no longer available on this device.'); return; }
+        audioUrl = URL.createObjectURL(blob);
+        captured.src = audioUrl;
+      }).catch(e => { if (alive && player === captured) report(e); });
+      captured.addEventListener('loadedmetadata', () => {
+        if (player !== captured || pendingSeek == null) return;
+        captured.currentTime = pendingSeek; pendingSeek = null;
+        captured.play().catch(report);
+      });
+      captured.addEventListener('error', () => { if (alive && player === captured) toast('This recording could not be played.'); });
+    }
+    const captured = player;
     const speeds = h('div', { class: 'ls-speeds' }, ...[0.75, 1, 1.25].map(r =>
-      h('button', { type: 'button', class: 'sn-chip' + (r === 1 ? ' on' : ''), onclick: e => {
-        player.playbackRate = r;
+      h('button', { type: 'button', class: 'sn-chip' + (r === captured.playbackRate ? ' on' : ''), onclick: e => {
+        captured.playbackRate = r;
         speeds.querySelectorAll('.sn-chip').forEach(b => b.classList.toggle('on', b === e.currentTarget));
       } }, `${r}×`)));
-    let showZh = false;
-    const zhToggle = h('button', { type: 'button', class: 'sn-chip', onclick: () => {
-      showZh = !showZh;
+    let showZh = detailState.showZh;
+    const revealed = detailState.revealed;
+    const zhToggle = h('button', { type: 'button', class: 'sn-chip' + (showZh ? ' on' : ''), onclick: () => {
+      showZh = !showZh; detailState.showZh = showZh;
       zhToggle.classList.toggle('on', showZh);
-      lines.querySelectorAll('.ls-zh').forEach(z => z.classList.toggle('reveal-hidden', !showZh));
+      view.refresh();
     } }, '中文');
-
-    const seek = (t) => { if (!player) return; stopSpeak(); player.currentTime = Math.max(0, t.start - 0.5); player.play().catch(() => {}); };
-    const rows = turns.map((t, i) => {
-      const role = h('button', { type: 'button', class: 'ls-role', title: 'Tap to change speaker', onclick: async () => {
+    const seek = t => {
+      if (!alive || openId !== lesson.id || player !== captured) return;
+      stopSpeak();
+      const time = Math.max(0, t.start - 0.5);
+      if (!captured.readyState) { pendingSeek = time; return; }
+      captured.currentTime = time;
+      captured.play().catch(report);
+    };
+    const view = createTranscriptView({ turns, renderRow: (t, i) => {
+      const role = h('button', { type: 'button', class: 'ls-role', title: 'Tap to change speaker', onclick: attempt(async () => {
         const c = lesson.chunks[t.chunk].turns?.[t.idx];
         if (!c) return;
-        c.role = NEXT_ROLE[c.role];
-        await putLesson(lesson);
-        t.role = c.role;
-        row.className = `ls-line ${t.role}`;
-        role.textContent = ROLE[t.role];
-      } }, ROLE[t.role]);
-      const zh = t.zh ? h('div', { class: 'ls-zh reveal-hidden', onclick: e => e.currentTarget.classList.toggle('reveal-hidden') }, t.zh) : null;
+        c.role = NEXT_ROLE[c.role] || 'teacher';
+        invalidateNotes(lesson);
+        const saving = saveEdit(lesson);
+        detailSig = ''; paintDetail(lesson);
+        await saving;
+      }) }, ROLE[t.role]);
+      const zh = t.zh ? h('div', { class: 'ls-zh' + (showZh || revealed.has(i) ? '' : ' reveal-hidden'), onclick: e => {
+        const hidden = e.currentTarget.classList.toggle('reveal-hidden');
+        if (hidden) revealed.delete(i); else revealed.add(i);
+      } }, t.zh) : null;
       const row = h('div', { class: `ls-line ${t.role}`, 'data-i': i },
         h('div', { class: 'ls-line-head' }, role, h('button', { type: 'button', class: 'ls-time', onclick: () => seek(t) }, clock(t.start))),
-        h('button', { type: 'button', class: 'ls-text', title: 'Play from here', onclick: () => seek(t) }, t.text),
-        zh,
+        h('button', { type: 'button', class: 'ls-text', title: 'Play from here', onclick: () => seek(t) }, t.text), zh,
         ...(fixes.get(i) || []).map(c => h('div', { class: 'ls-fix' },
-          h('div', {}, icon('check', 14), h('b', {}, c.suggestion)),
-          c.reason ? h('small', {}, c.reason) : null)));
+          h('div', {}, icon('check', 14), h('b', {}, c.suggestion)), c.reason ? h('small', {}, c.reason) : null)));
+      if (t.role === 'student') row.style.marginLeft = 'auto';
       return row;
-    });
-    const lines = h('div', { class: 'ls-lines' }, ...rows);
-    if (!rows.length) lines.append(h('p', { class: 'ls-note' }, 'No speech was recognised.'));
-
-    // 播放时高亮当前句并跟随滚动
-    let cur = -1;
-    player.addEventListener('timeupdate', (e) => {
-      const p = e.currentTarget; // 离开详情页时 player 已置空，暂停仍会触发一次 timeupdate
-      if (!p.getAttribute('src')) return;
-      const t = p.currentTime;
-      let i = turns.findIndex(x => x.start > t + 0.5) - 1;
-      if (i < -1) i = turns.length - 1;
+    } });
+    transcript = view;
+    const lines = view.element;
+    let cur = -2;
+    captured.ontimeupdate = () => {
+      if (!alive || player !== captured || !captured.getAttribute('src')) return;
+      const i = activeTurnIndex(turns, captured.currentTime);
       if (i === cur) return;
-      rows[cur]?.classList.remove('on');
-      cur = i;
-      if (rows[cur]) {
-        rows[cur].classList.add('on');
-        if (!p.paused) rows[cur].scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
-    });
+      cur = i; view.active(i, !captured.paused);
+    };
+    captured.ontimeupdate();
 
     const banner = [];
     const stopped = lesson.status === 'error' || lesson.status === 'processing' || lesson.status === 'paused';
     if (!stopped && failed.length) banner.push(h('div', { class: 'ls-warn' },
       `${failed.length} part${failed.length > 1 ? 's' : ''} of the recording could not be transcribed (${failed.map(c => `${clock(c.start)}–${clock(c.end)}`).slice(0, 3).join(', ')}).`,
-      h('button', { type: 'button', class: 'btn sm', onclick: () => resume(lesson.id) }, 'Retry')));
+      h('button', { type: 'button', class: 'btn sm', onclick: attempt(() => resume(lesson.id)) }, 'Retry')));
     if (stopped) banner.push(h('div', { class: 'ls-warn' },
       lesson.error || 'Processing was interrupted.',
-      h('button', { type: 'button', class: 'btn sm', onclick: () => resume(lesson.id) }, lesson.chunks?.length ? 'Resume' : 'Retry')));
+      h('button', { type: 'button', class: 'btn sm', onclick: attempt(() => resume(lesson.id)) }, lesson.chunks?.length ? 'Resume' : 'Retry')));
     if (turns.length && turns.every(t => t.role === 'unknown')) banner.push(h('div', { class: 'ls-warn' }, 'Speakers could not be identified. Tap a label to set it.'));
 
     const main = h('section', { class: 'wm-card glass ls-main' },
@@ -338,22 +404,22 @@ export function renderLessons(root) {
       ['expressions', `Expressions${notes ? ` · ${notes.expressions.length}` : ''}`],
       ['words', `Words${notes ? ` · ${notes.words.length}` : ''}`],
     ];
-    let tab = 'summary';
+    let tab = detailState.tab;
     const tabBar = h('div', { class: 'sn-chips ls-tabs' });
     const pane = h('div', { class: 'ls-pane' });
     const add = (front, back, example) => toast(addCard(front, back, example) ? `“${front}” added to your review deck` : 'Already in your review deck');
     const paintPane = () => {
       tabBar.replaceChildren(...tabs.map(([k, label]) =>
-        h('button', { type: 'button', class: 'sn-chip' + (k === tab ? ' on' : ''), onclick: () => { tab = k; paintPane(); } }, label)));
+        h('button', { type: 'button', class: 'sn-chip' + (k === tab ? ' on' : ''), onclick: () => { tab = k; detailState.tab = k; paintPane(); } }, label)));
       if (!notes) {
         pane.replaceChildren(h('p', { class: 'ls-note' }, lesson.notesError ? `Notes failed: ${lesson.notesError}` : 'No notes yet.'),
-          turns.length ? h('button', { type: 'button', class: 'btn sm', onclick: () => regenerateNotes(lesson.id) }, 'Generate notes') : null);
+          turns.length ? h('button', { type: 'button', class: 'btn sm', onclick: attempt(() => rewriteNotes(lesson.id)) }, 'Generate notes') : null);
         return;
       }
       if (tab === 'summary') pane.replaceChildren(
         h('p', { class: 'ls-sum' }, notes.summary.en),
         h('p', { class: 'ls-sum zh' }, notes.summary.zh),
-        h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { if (confirm('Rewrite the review notes?')) regenerateNotes(lesson.id); } }, icon('repeat', 15), 'Regenerate notes'));
+        h('button', { type: 'button', class: 'btn sm ghost', onclick: attempt(() => { if (confirm('Rewrite the review notes?')) return rewriteNotes(lesson.id); }) }, icon('repeat', 15), 'Regenerate notes'));
       else if (tab === 'corrections') pane.replaceChildren(...(notes.corrections.length ? notes.corrections.map(c => {
         const i = [...fixes].find(([, list]) => list.includes(c))?.[0];
         return h('div', { class: 'ls-item' },
@@ -361,7 +427,7 @@ export function renderLessons(root) {
           h('div', { class: 'ls-sugg' }, c.suggestion),
           c.reason ? h('small', {}, c.reason) : null,
           h('div', { class: 'ls-item-actions' },
-            i != null ? h('button', { type: 'button', class: 'sn-chip', onclick: () => { rows[i].scrollIntoView({ block: 'center', behavior: 'smooth' }); seek(turns[i]); } }, icon('play', 13), clock(turns[i].start)) : null,
+            i != null ? h('button', { type: 'button', class: 'sn-chip', onclick: () => { view.jump(i); seek(turns[i]); } }, icon('play', 13), clock(turns[i].start)) : null,
             h('button', { type: 'button', class: 'sn-chip', onclick: () => add(c.suggestion, c.reason, c.original) }, icon('plus', 13), 'Review')));
       }) : [h('p', { class: 'ls-note' }, 'No corrections — nice work.')]));
       else if (tab === 'expressions') pane.replaceChildren(...notes.expressions.map(e =>
@@ -376,22 +442,28 @@ export function renderLessons(root) {
       h('div', { class: 'wm-card-head' }, h('span', { class: 'wm-label' }, 'REVIEW NOTES')), tabBar, pane);
 
     wrap.replaceChildren(head, h('div', { class: 'wm-body ls-body' }, main, side));
+    view.element.scrollTop = detailState.scroll;
+    view.refresh();
+    if (wasPlaying && captured.paused) captured.play().catch(report);
   }
 
   const unsub = subscribe(id => {
     if (!alive) return;
-    if (!openId) paintList();
-    else if (id === openId) paint();
+    if (openId && id !== openId) return;
+    if (progressTimer) return;
+    progressTimer = setTimeout(() => { progressTimer = 0; paint(); }, 100);
   });
   const onKey = (e) => {
-    if (!player || document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (!player || document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT|BUTTON|A|AUDIO/.test(e.target.tagName) || e.target.isContentEditable) return;
     if (e.key === ' ') { e.preventDefault(); player.paused ? player.play().catch(() => {}) : player.pause(); }
   };
   document.addEventListener('keydown', onKey);
   paint();
 
   return () => {
-    alive = false;
+    alive = false; generation++; uploadGeneration++;
+    clearTimeout(progressTimer);
+    for (const close of dialogs) close();
     unsub();
     releaseAudio();
     document.removeEventListener('keydown', onKey);

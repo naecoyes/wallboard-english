@@ -1,7 +1,7 @@
 # WallBoard English
 
 挂在墙上的平板常驻英语学习终端：待机仪表盘、碎片练习（5 分钟）、专注学习（25 分钟）、雅思单词模式，
-短文阅读（Reading）、间隔复习、连续打卡、白天/夜间自动切换。纯前端静态网站，数据只保存在本机浏览器。
+短文阅读（Reading）、课堂录音（Lessons）、间隔复习、连续打卡、白天/夜间自动切换。静态网站；学习数据先保存在本机，可选同步。课堂录音和转写只保存在本机。
 
 ## 使用
 
@@ -46,6 +46,30 @@ python3 tools/build_passages.py --list   # 抓取 VOA 并导出 tools/passages_e
 python3 tools/build_passages.py          # 合并 tools/passages_zh.json，生成 js/passages.js
 python3 tools/gen_audio.py               # 补齐新句子的朗读音频
 ```
+
+## 课堂录音与可靠性
+
+- Lessons → Options 中设置 Gemini Key；它只保存在当前浏览器，不进入同步。没有 Gemini Key 时使用已配置的 MiMo。
+- Gemini 的时间定位和说话人标签是模型结果，仍应核对；MiMo 的时间按段内文字估算。识别后的原话与纠错建议分开保存。
+- 音频转换、切段和编码在 Worker 处理；顺序上传以降低峰值内存。长录音仍需整段 Web Audio 解码，60/90 分钟录音应在目标平板上验证。
+- 课堂数据库升级自动保留旧录音、对话和笔记。分片保存、摘要列表、虚拟对话列表减少重复读写和页面负担。
+- 暂停阻止后续请求；已经到达服务商的请求是否计费由服务商决定。删除等待本机任务停止，并保留删除标记以拒绝迟到写入。
+- 本地 API 密钥配置不由 Service Worker 缓存，凭证只发送给 Google / Xiaomi 的固定官方接口。
+- 同步按共同基线合并字段与卡片，保留独立修改；同一字段的冲突仍按更新时间选择。没有共同基线的旧数据、缺少明细的旧历史汇总无法完全还原。
+- Cloudflare 服务代码在 `cloudflare/`；尚未填写 `CLOUD_SYNC_URL` 时使用 GitHub 同步。共享链接撤销会断开所有持有旧链接的设备，不提供单设备撤销。
+
+## 测试与发布
+
+```bash
+node tools/check.mjs
+node --test tests/*.mjs cloudflare/test/worker.test.js
+node tools/test_profiles.mjs
+node tools/test_lesson_transcript.mjs
+RUN_BROWSER_TESTS=1 node --test --test-concurrency=1 tests/db.browser.test.mjs tests/app.browser.test.mjs
+```
+
+浏览器集成测试使用独立临时配置和模拟接口，不调用付费 API。macOS 默认使用已安装的 Google Chrome；其他环境设置 `CHROME_BIN`。仅在隔离的 CI 容器需要时设置 `CHROME_NO_SANDBOX=1`。
+GitHub Actions 自动执行这些检查。发布后确认 Pages 部署成功、缓存版本更新，并在实际平板核对长录音的内存与识别效果。
 
 ## 数据来源与许可
 

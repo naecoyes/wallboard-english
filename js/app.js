@@ -2,6 +2,8 @@
 import { get, update, switchUser } from './store.js';
 import { initUserPicker } from './user-picker.js';
 import { stopSpeak } from './tts.js';
+import { hasActiveJobs, subscribe as subscribeLessons } from './lessons/runner.js';
+import { toast } from './ui.js';
 import { closeLookup } from './lookup.js';
 import { SEED_DECK } from './content.js';
 import { newCard } from './srs.js';
@@ -107,7 +109,11 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || refreshing) return;
     refreshing = true;
-    location.reload();
+    if (!hasActiveJobs()) { location.reload(); return; }
+    toast('Update ready — it will apply when lesson processing finishes');
+    const unsubscribe = subscribeLessons(() => {
+      if (!hasActiveJobs()) { unsubscribe(); location.reload(); }
+    });
   });
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
     .then(registration => registration.update())

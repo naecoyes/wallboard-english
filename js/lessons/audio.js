@@ -4,20 +4,96 @@ export const CHUNK_SEC = 90;   // 目标段长：ASR 上下文 8k token、单次
 const SEARCH_SEC = 8;          // 在目标位置前后 8 秒内找最安静的地方下刀，避免切断单词
 const FRAME = RATE / 20;       // 50 ms 一帧算能量
 
-/** 解码任意浏览器支持的音频（mp3 / m4a / wav…），直接解成 16 kHz 并混成单声道 Int16 */
-export async function decodeToPcm(blob) {
-  const ctx = new OfflineAudioContext(1, 1, RATE); // decodeAudioData 会重采样到上下文的采样率
-  const ab = await ctx.decodeAudioData(await blob.arrayBuffer());
-  const n = ab.length, ch = ab.numberOfChannels;
-  const pcm = new Int16Array(n);
-  const chans = Array.from({ length: ch }, (_, i) => ab.getChannelData(i));
-  for (let i = 0; i < n; i++) {
+/** Pure conversion, also used by the module worker and Node tests. */
+export function pcmFromChannels(channels) {
+  if (!channels.length) return new Int16Array();
+  const pcm = new Int16Array(channels[0].length);
+  for (let i = 0; i < pcm.length; i++) {
     let v = 0;
-    for (let c = 0; c < ch; c++) v += chans[c][i];
-    v /= ch;
+    for (const channel of channels) v += channel[i];
+    v /= channels.length;
     pcm[i] = v < -1 ? -32768 : v > 1 ? 32767 : Math.round(v * 32767);
   }
   return pcm;
+}
+
+async function decodeChannels(blob) {
+  const ctx = new OfflineAudioContext(1, 1, RATE);
+  const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+  return Array.from({ length: audio.numberOfChannels }, (_, i) => audio.getChannelData(i));
+}
+
+/** Compatible PCM-returning API. Prefer prepareAudio for long recordings. */
+export async function decodeToPcm(blob) {
+  return pcmFromChannels(await decodeChannels(blob));
+}
+
+const abortError = () => new DOMException('Audio preparation cancelled', 'AbortError');
+
+/**
+ * Decode once; transfer float channels to a worker and retain its sole Int16 PCM.
+ * A one-hour recording still needs ~115 MB PCM plus Web Audio's transient float
+ * decode (~230 MB/channel). Never pre-encode all chunks; request each on demand.
+ * dispose() terminates the worker immediately, including conversion/encoding.
+ */
+export async function prepareAudio(blob, { chunkSec = CHUNK_SEC, signal } = {}) {
+  if (signal?.aborted) throw abortError();
+  let worker;
+  if (typeof Worker !== 'undefined') {
+    try { worker = new Worker(new URL('./audio-worker.js', import.meta.url), { type: 'module' }); }
+    catch { /* Restricted/older browsers keep the compatible local path. */ }
+  }
+  let disposed = false, seq = 0, pcm;
+  const pending = new Map();
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    worker?.terminate();
+    pcm = null;
+    for (const { reject } of pending.values()) reject(abortError());
+    pending.clear();
+    signal?.removeEventListener('abort', dispose);
+  };
+  signal?.addEventListener('abort', dispose, { once: true });
+  const request = (type, payload = {}, transfer = []) => new Promise((resolve, reject) => {
+    if (disposed) { reject(abortError()); return; }
+    const id = ++seq;
+    pending.set(id, { resolve, reject });
+    try { worker.postMessage({ id, type, ...payload }, transfer); }
+    catch (error) { pending.delete(id); reject(error); }
+  });
+  if (worker) {
+    worker.onmessage = ({ data }) => {
+      const task = pending.get(data.id);
+      if (!task) return;
+      pending.delete(data.id);
+      if (data.error) task.reject(new Error(data.error)); else task.resolve(data.result);
+    };
+    worker.onerror = (event) => {
+      for (const { reject } of pending.values()) reject(new Error(event.message || 'Audio worker failed'));
+      dispose();
+    };
+  }
+  try {
+    let channels = await decodeChannels(blob);
+    if (disposed) throw abortError();
+    let result;
+    if (worker) {
+      result = await request('prepare', { channels, chunkSec }, [...new Set(channels.map(c => c.buffer))]);
+    } else {
+      pcm = pcmFromChannels(channels);
+      result = { duration: pcm.length / RATE, chunks: planChunks(pcm, chunkSec) };
+    }
+    channels = null;
+    return {
+      ...result,
+      wavBase64(start, end) {
+        if (disposed) return Promise.reject(abortError());
+        return worker ? request('wavBase64', { start, end }) : Promise.resolve(base64(wavBytes(pcm, start, end)));
+      },
+      dispose,
+    };
+  } catch (error) { dispose(); throw error; }
 }
 
 /** 每 50 ms 的平均绝对振幅 */
@@ -33,15 +109,17 @@ function frameEnergy(pcm, from, to) {
 
 /** 切段：返回 [[起始秒, 结束秒], …]，每段约 CHUNK_SEC，边界落在附近最安静的 50 ms */
 export function planChunks(pcm, chunkSec = CHUNK_SEC) {
+  if (!Number.isFinite(chunkSec) || chunkSec <= 0) throw new RangeError('chunkSec must be positive');
   const total = pcm.length;
-  const step = chunkSec * RATE, win = SEARCH_SEC * RATE;
+  if (!total) return [];
+  const step = Math.max(1, Math.round(chunkSec * RATE)), win = Math.min(SEARCH_SEC * RATE, Math.floor(step / 2));
   const cuts = [0];
   while (total - cuts.at(-1) > step + win) {
     const target = cuts.at(-1) + step;
     const frames = frameEnergy(pcm, target - win, Math.min(total, target + win));
     let best = frames[0];
     for (const fr of frames) if (fr[1] < best[1]) best = fr;
-    cuts.push(best[0] + FRAME / 2);
+    cuts.push(best ? best[0] + FRAME / 2 : target);
   }
   cuts.push(total);
   const out = [];

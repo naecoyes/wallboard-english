@@ -1,3 +1,4 @@
+import { approvedEndpoint } from '../api-origins.js';
 // api.js — 课堂录音的模型调用，浏览器直接请求，Key 只存在本机
 //   Gemini（有 Key 时优先）：一次请求同时完成转写 + 分老师 / 学生 + 时间戳 + 中文，复习笔记也用它
 //   小米 MiMo（备用）：mimo-v2.5-asr 转写 + mimo-v2.6-flash 分说话人 / 翻译 / 复习笔记
@@ -23,35 +24,41 @@ function friendly(provider, status, msg) {
 }
 
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
-  const t = setTimeout(resolve, ms);
-  signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+  signal?.throwIfAborted();
+  const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+  signal?.addEventListener('abort', abort, { once: true });
 });
 
-/** POST 一次；429 / 5xx / 网络错误自动退避重试 */
+/** Keep cancellation and timeout active through response-body consumption. */
 async function post(auth, body, { timeout = 120000, signal, tries = 3, model } = {}) {
   const gem = auth.provider === 'gemini';
-  const url = gem ? `${auth.base}/models/${encodeURIComponent(model)}:generateContent` : auth.endpoint;
+  const base = approvedEndpoint(gem ? 'gemini' : 'mimo', gem ? auth.base : auth.endpoint);
+  const url = gem ? `${base}/models/${encodeURIComponent(model)}:generateContent` : base;
   const headers = gem ? { 'x-goog-api-key': auth.key, 'Content-Type': 'application/json' }
     : { Authorization: `Bearer ${auth.key}`, 'Content-Type': 'application/json' };
   for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(new DOMException('Timed out', 'TimeoutError')), timeout);
     const onAbort = () => ctl.abort(signal.reason);
     signal?.addEventListener('abort', onAbort, { once: true });
-    let res, err;
+    let res, data, err;
     try {
       res = await fetch(url, { method: 'POST', signal: ctl.signal, headers, body: JSON.stringify(body) });
-    } catch (e) { err = e; } finally { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); }
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    if (res?.ok) return res.json();
+      data = await res.json();
+      signal?.throwIfAborted();
+      if (res.ok) return data;
+    } catch (e) { err = e; }
+    finally { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); }
+    signal?.throwIfAborted();
     const status = res?.status || 0;
-    let msg = '';
-    if (res) { try { const j = await res.json(); msg = j.error?.message || ''; } catch {} }
-    const retry = !res || status === 429 || status >= 500;
-    const tooLong = gem ? status === 413 || /too large|exceed|too long/i.test(msg) : status === 400 || status === 413;
-    if (!retry || attempt >= tries - 1) throw new ApiError(status, res ? friendly(auth.provider, status, msg) : `Network error: ${err?.message || err}`, tooLong);
+    const msg = data?.error?.message || '';
+    const retry = !!err || status === 429 || status >= 500;
+    const tooLong = status === 413 || /payload.{0,20}(large|limit)|context.{0,20}(exceed|limit)|audio.{0,20}too long|maximum.{0,20}(size|length)/i.test(msg);
+    if (!retry || attempt >= tries - 1) throw new ApiError(status, err ? `Request failed: ${err.message}` : friendly(auth.provider, status, msg), tooLong);
     const after = Number(res?.headers.get('retry-after')) || 0;
-    await sleep(Math.max(after * 1000, (status === 429 ? 15000 : 3000) * (attempt + 1)), signal);
+    await sleep(Math.min(60000, Math.max(after * 1000, (status === 429 ? 15000 : 3000) * (attempt + 1))), signal);
   }
 }
 
@@ -63,7 +70,9 @@ export async function transcribe(auth, b64, opts) {
     messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: `data:audio/wav;base64,${b64}` } }] }],
     asr_options: { language: 'en' },
   }, opts);
-  return (d.choices?.[0]?.message?.content || '').trim();
+  const text = d.choices?.[0]?.message?.content;
+  if (typeof text !== 'string' || !text.trim()) throw new ApiError(0, 'ASR returned no transcript; retry this part');
+  return text.trim();
 }
 
 /** 宽松解析：去掉 ```json 代码块、截取第一个 { 到最后一个 } */
@@ -92,9 +101,12 @@ async function gemini(auth, model, parts, system, opts = {}) {
 
 /** "MM:SS" / "H:MM:SS" / 秒数 → 秒 */
 export function parseClock(v) {
-  if (typeof v === 'number') return v;
+  if (v == null || String(v).trim() === '') return NaN;
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? v : NaN;
+  if (!/^\d+(?::\d{1,2}){0,2}(?:\.\d+)?$/.test(String(v).trim())) return NaN;
   const p = String(v || '').trim().split(':').map(Number);
   if (!p.length || p.some(Number.isNaN)) return NaN;
+  if (p.some((x, i) => x < 0 || (i > 0 && x >= 60))) return NaN;
   return p.reduce((a, x) => a * 60 + x, 0);
 }
 
@@ -106,13 +118,16 @@ Rules:
 - If someone speaks Chinese, write it in Chinese characters in "text".
 - "start": when the turn begins, measured from the beginning of THIS audio.
 - "zh": natural Simplified Chinese translation of the turn.
-- Merge consecutive sentences by the same speaker into one turn.`;
+- Merge consecutive sentences by the same speaker into one turn.
+- If the audio contains no speech, return {"turns":[],"silence":true}.`;
 
 /** Gemini：一段 WAV → [{role, text, zh, at（相对本段的秒数）}] */
 export async function geminiTurns(auth, model, b64, prev, opts) {
   const ctx = prev ? `\nContext: the previous part of the lesson ended with the ${prev.role} saying "${prev.text.slice(-200)}".` : '';
   const out = parseJSON(await gemini(auth, model, [{ inline_data: { mime_type: 'audio/wav', data: b64 } }, { text: GEMINI_TRANSCRIBE + ctx }], '', opts));
-  return (Array.isArray(out.turns) ? out.turns : [])
+  if (!Array.isArray(out.turns) || out.turns.some(t => !t || typeof t.text !== 'string' || !t.text.trim())) throw new ApiError(0, 'Invalid transcript response; retry this part');
+  if (!out.turns.length && out.silence !== true) throw new ApiError(0, 'Empty transcript without a silence marker');
+  return out.turns
     .filter(t => t && typeof t.text === 'string' && t.text.trim())
     .map(t => ({ role: t.role === 'student' ? 'student' : t.role === 'teacher' ? 'teacher' : 'unknown', text: t.text.trim(), zh: String(t.zh || '').trim(), at: parseClock(t.start) }));
 }
@@ -209,10 +224,20 @@ Up to 25 corrections, 15 expressions, 20 words, most useful first.`;
 export async function buildNotes(auth, model, turns, opts) {
   const lines = turns.map((t, i) => `[${i}] ${t.role === 'teacher' ? 'Teacher' : t.role === 'student' ? 'Student' : 'Speaker'}: ${t.text}`).join('\n');
   const n = await chatJSON(auth, model, NOTES_PROMPT, lines, opts);
+  if (!n || typeof n.summary_en !== 'string' || !n.summary_en.trim() || !['corrections', 'expressions', 'words'].every(k => Array.isArray(n[k]))) {
+    throw new ApiError(0, 'Invalid review notes; regenerate notes to retry');
+  }
+  const norm = text => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const corrections = n.corrections.filter(c => c && c.original && c.suggestion).flatMap(c => {
+    const evidence = norm(c.original);
+    const matches = t => t?.role === 'student' && evidence && norm(t.text).includes(evidence);
+    const line = matches(turns[c.line]) ? c.line : turns.findIndex(matches);
+    return line < 0 ? [] : [{ ...c, line }];
+  });
   const arr = (x) => (Array.isArray(x) ? x : []);
   return {
     summary: { en: String(n.summary_en || ''), zh: String(n.summary_zh || '') },
-    corrections: arr(n.corrections).filter(c => c && c.original && c.suggestion)
+    corrections: corrections
       .filter((c, i, all) => all.findIndex(x => x.original === c.original && x.suggestion === c.suggestion) === i) // 同一个错误只留一次
       .map(c => ({ line: Number.isInteger(c.line) ? c.line : -1, original: String(c.original), suggestion: String(c.suggestion), reason: String(c.reason_zh || '') })),
     expressions: arr(n.expressions).filter(e => e && e.en).map(e => ({ en: String(e.en), zh: String(e.zh || ''), example: String(e.example || '') })),
