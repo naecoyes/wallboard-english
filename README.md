@@ -69,7 +69,7 @@ RUN_BROWSER_TESTS=1 node --test --test-concurrency=1 tests/db.browser.test.mjs t
 ```
 
 浏览器集成测试使用独立临时配置和模拟接口，不调用付费 API。macOS 默认使用已安装的 Google Chrome；其他环境设置 `CHROME_BIN`。仅在隔离的 CI 容器需要时设置 `CHROME_NO_SANDBOX=1`。
-GitHub Actions 自动执行这些检查。发布后确认 Pages 部署成功、缓存版本更新，并在实际平板核对长录音的内存与识别效果。
+Actions 工作流已在本地准备；当前 GitHub 凭证缺少 `workflow` 权限，尚未上传启用。现可运行上述命令完成同样检查。发布后确认 Pages 部署成功、缓存版本更新，并在实际平板核对长录音的内存与识别效果。
 
 ## 数据来源与许可
 
